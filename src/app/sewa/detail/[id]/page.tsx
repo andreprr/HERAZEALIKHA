@@ -1,35 +1,28 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import toast from 'react-hot-toast';
 import { 
-  ArrowLeft, Printer, CheckCircle, Clock, Package, 
-  CalendarDays, User, ShieldCheck, Banknote, Loader2
+  ArrowLeft, MessageCircle, FileText, User, 
+  Calendar, ShoppingBag, CreditCard, Loader2, ShieldCheck, Phone, Printer, CheckCircle
 } from 'lucide-react';
 
 export default function DetailSewaPage() {
-  const params = useParams();
   const router = useRouter();
-  const id = params?.id;
+  const params = useParams();
+  const id = params.id as string;
 
+  const [isLoading, setIsLoading] = useState(true);
   const [sewa, setSewa] = useState<any>(null);
   const [items, setItems] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  // State Modal Pelunasan
-  const [isModalPelunasanOpen, setIsModalPelunasanOpen] = useState(false);
-  const [nominalPelunasan, setNominalPelunasan] = useState(0);
-  const [metodeBayar, setMetodeBayar] = useState('Tunai');
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (id) fetchDetail();
   }, [id]);
 
   const fetchDetail = async () => {
-    setIsLoading(true);
     try {
       const { data: sewaData, error: sewaError } = await supabase
         .from('sewa')
@@ -39,194 +32,251 @@ export default function DetailSewaPage() {
 
       if (sewaError) throw sewaError;
       setSewa(sewaData);
-      
-      const sisa = (sewaData.total_harga || 0) - (sewaData.dp || 0);
-      setNominalPelunasan(sisa > 0 ? sisa : 0);
 
-      const { data: itemData, error: itemError } = await supabase
+      const { data: itemsData, error: itemsError } = await supabase
         .from('sewa_items')
-        .select(`*, katalog_barang(nama_barang, kategori)`)
+        .select(`
+          *,
+          katalog_barang (nama_barang)
+        `)
         .eq('sewa_id', id);
 
-      if (itemError) throw itemError;
-      if (itemData) setItems(itemData);
+      if (itemsError) throw itemsError;
+      setItems(itemsData || []);
 
     } catch (error: any) {
       toast.error('Gagal memuat detail transaksi.');
+      router.push('/sewa');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handlePelunasan = async () => {
-    if (nominalPelunasan <= 0) return toast.error('Nominal pelunasan tidak valid!');
+  // Fungsi Kirim WA (Teks sangat bersih tanpa simbol apapun)
+  const handleKirimWA = () => {
+    if (!sewa) return;
+    if (!sewa.no_wa || sewa.no_wa === '-') {
+      toast.error('Nomor WhatsApp pelanggan tidak tersedia.');
+      return;
+    }
 
-    setIsSubmitting(true);
+    let phone = sewa.no_wa.replace(/\D/g, '');
+    if (phone.startsWith('0')) {
+      phone = '62' + phone.substring(1);
+    }
+
+    const pesan = `Halo Kak ${sewa.nama_penyewa},
+    
+Berikut adalah lampiran PDF struk invoice penyewaan perlengkapan dari HERAZEALIKHA. 
+
+Mohon disimpan dan ditunjukkan saat pengambilan atau pengembalian barang ya Kak. Terima kasih!`;
+
+    const encodedPesan = encodeURIComponent(pesan);
+    window.open(`https://wa.me/${phone}?text=${encodedPesan}`, '_blank');
+  };
+
+  // Fungsi Cetak Struk (Simpan sebagai PDF)
+  const handleCetak = () => {
+    window.print();
+  };
+
+  // Fungsi Pelunasan Pembayaran
+  const handlePelunasan = async () => {
+    if (!window.confirm('Apakah Anda yakin pelanggan ini sudah melunasi sisa tagihannya?')) return;
+    
+    setIsLoading(true);
     try {
-      const dpBaru = (sewa.dp || 0) + Number(nominalPelunasan);
-      
       const { error } = await supabase
         .from('sewa')
         .update({ 
-          dp: dpBaru,
-          status_pembayaran: metodeBayar === 'Tunai' ? 'diterima' : 'menunggu'
+          dp: sewa.total_harga, // Update DP menjadi sama dengan total harga (Lunas)
+          status_pembayaran: 'diterima'
         })
         .eq('id', id);
 
       if (error) throw error;
-
-      toast.success('Pelunasan berhasil disimpan!');
-      setIsModalPelunasanOpen(false);
-      fetchDetail();
-    } catch (error: any) {
+      
+      toast.success('Pembayaran berhasil dilunasi!');
+      fetchDetail(); // Refresh data
+    } catch (error) {
       toast.error('Gagal memproses pelunasan.');
-    } finally {
-      setIsSubmitting(false);
+      setIsLoading(false);
     }
-  };
-
-  const formatDate = (dateString: string) => {
-    if (!dateString) return '-';
-    return new Date(dateString).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
   };
 
   if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] bg-white">
-        <Loader2 size={40} className="text-purple-700 animate-spin mb-2" />
-        <p className="text-slate-500 text-sm">Memuat detail transaksi...</p>
+      <div className="flex flex-col items-center justify-center h-[calc(100vh-5rem)] bg-white">
+        <Loader2 size={40} className="text-purple-700 animate-spin mb-4" />
+        <p className="text-slate-500 font-medium">Memuat detail transaksi...</p>
       </div>
     );
   }
 
-  if (!sewa) {
-    return (
-      <div className="text-center py-20 bg-white">
-        <p className="text-slate-500">Data transaksi tidak ditemukan.</p>
-        <button onClick={() => router.back()} className="mt-4 text-purple-700 font-bold text-sm">Kembali</button>
-      </div>
-    );
-  }
+  if (!sewa) return null;
 
-  const totalHarga = sewa.total_harga || 0;
-  const sudahDibayar = sewa.dp || 0;
-  const sisaTagihan = totalHarga - sudahDibayar;
-  const isLunas = sisaTagihan <= 0;
+  const total = sewa.total_harga || 0;
+  const dp = sewa.dp || 0;
+  const sisa = total - dp;
 
   return (
-    <div className="flex flex-col gap-6 h-full pb-12 pt-2 w-full max-w-4xl mx-auto bg-white">
-      
-      {/* CSS KHUSUS CETAK STRUK DENGAN LOGO */}
-      <style dangerouslySetInnerHTML={{__html: `
-        @media print {
-          body * { visibility: hidden; }
-          #print-receipt-area, #print-receipt-area * { visibility: visible; }
-          #print-receipt-area { 
-            position: absolute; 
-            left: 0; 
-            top: 0; 
-            width: 100%; 
-            margin: 0; 
-            padding: 20px; 
-            background: white !important; 
-            color: black !important; 
+    <>
+      {/* CSS Injection Khusus Cetak: Menyembunyikan Sidebar & Topbar secara paksa */}
+      <style dangerouslySetInnerHTML={{
+        __html: `
+          @media print {
+            body * {
+              visibility: hidden;
+            }
+            #area-cetak, #area-cetak * {
+              visibility: visible;
+            }
+            #area-cetak {
+              position: absolute;
+              left: 0;
+              top: 0;
+              width: 100%;
+              padding: 20px;
+            }
+            .print\\:hidden {
+              display: none !important;
+            }
           }
-          .print-hidden { display: none !important; }
-        }
-      `}} />
+        `
+      }} />
 
-      {/* HEADER NAVIGASI & AKSI */}
-      <div className="flex items-center justify-between bg-white p-4 rounded-2xl shadow-sm border border-purple-200 print-hidden">
-        <button onClick={() => router.back()} className="flex items-center gap-2 text-slate-600 hover:text-purple-700 font-bold text-sm transition-colors">
-          <ArrowLeft size={18} /> Kembali
-        </button>
-        <div className="flex items-center gap-2">
-          <button onClick={() => window.print()} className="flex items-center gap-1.5 bg-purple-700 hover:bg-purple-800 text-white px-4 py-2 rounded-xl text-xs font-bold transition-colors shadow-sm">
-            <Printer size={16} /> Cetak Struk
-          </button>
-          {!isLunas && (
-            <button onClick={() => setIsModalPelunasanOpen(true)} className="flex items-center gap-1.5 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition-colors shadow-sm">
-              <Banknote size={16} /> Lunasi Tagihan
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* AREA UTAMA & PRINT STRUK */}
-      <div id="print-receipt-area" className="bg-white rounded-2xl shadow-sm border border-purple-200 p-6 sm:p-8 space-y-6">
+      <div id="area-cetak" className="flex flex-col gap-6 min-h-screen pb-24 pt-2 w-full max-w-4xl mx-auto bg-white print:bg-white print:pb-0">
         
-        {/* LOGO TOKO */}
-        <div className="flex flex-col items-center justify-center text-center border-b border-purple-100 pb-5">
-          <img src="/logo.jpeg" alt="Herazealikha Logo" className="h-32 w-auto object-contain mb-2" />
+        {/* HEADER & AKSI - Disembunyikan saat dicetak (print:hidden) */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full bg-white p-5 rounded-2xl shadow-sm border border-purple-200 print:hidden">
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={() => router.push('/sewa')}
+              className="p-2.5 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-xl transition-colors border border-slate-200"
+            >
+              <ArrowLeft size={18} />
+            </button>
+            <div>
+              <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                <FileText className="text-purple-700" size={22} /> Detail Transaksi
+              </h2>
+              <p className="text-sm font-semibold text-slate-500 mt-1">{sewa.invoice}</p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button 
+              onClick={handleKirimWA}
+              className="flex flex-1 sm:flex-none items-center justify-center gap-2 bg-green-500 hover:bg-green-600 text-white font-bold py-2.5 px-5 rounded-xl text-sm transition-transform hover:scale-[1.02] shadow-sm"
+            >
+              <MessageCircle size={18} />
+              Buka Chat WA
+            </button>
+
+            <button 
+              onClick={handleCetak}
+              className="flex flex-1 sm:flex-none items-center justify-center gap-2 bg-purple-700 hover:bg-purple-800 text-white font-bold py-2.5 px-5 rounded-xl text-sm transition-transform hover:scale-[1.02] shadow-sm"
+            >
+              <Printer size={18} />
+              Cetak (Save PDF)
+            </button>
+          </div>
         </div>
 
-        {/* Top Info */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-purple-100 pb-5">
-          <div>
-            <span className="text-xs font-bold text-purple-700 bg-purple-50 px-2.5 py-1 rounded-md uppercase tracking-wider">
-              Invoice #{sewa.invoice}
-            </span>
-            <h1 className="text-2xl font-black text-slate-800 mt-2">{sewa.nama_penyewa}</h1>
-            <p className="text-xs text-slate-400 mt-0.5">No WhatsApp: {sewa.no_wa || '-'}</p>
-          </div>
+        {/* TAMPILAN KHUSUS CETAK: Header Toko */}
+        <div className="hidden print:flex print:flex-col print:items-center text-center mb-6 pb-4 border-b-2 border-dashed border-gray-300">
+          <img 
+            src="/logo.jpeg" 
+            alt="Hera Zealikha Logo" 
+            className="h-20 w-auto mb-2 object-contain"
+            style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as React.CSSProperties} 
+          />
+          <h1 className="text-2xl font-black text-black">Hera Zealikha</h1>
+          <p className="text-sm text-gray-600">Sewa Gaun & Perlengkapan</p>
+          <p className="text-xs text-gray-500 mt-1">Invoice: {sewa.invoice}</p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 print:grid-cols-2 print:gap-4">
           
-          <div className="text-left sm:text-right">
-            <span className={`inline-block px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wide ${
-              sewa.status === 'selesai' ? 'bg-slate-100 text-slate-600' :
-              sewa.status === 'dibawa' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
-            }`}>
-              Status: {sewa.status}
-            </span>
-            <p className="text-xs text-slate-400 mt-1">Dibuat pada: {new Date(sewa.created_at).toLocaleString('id-ID')}</p>
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-purple-200 flex flex-col gap-4 print:border-gray-300 print:shadow-none print:p-4">
+            <h3 className="font-bold text-slate-800 flex items-center gap-2 border-b border-purple-100 pb-3 print:border-gray-200">
+              <User size={18} className="text-purple-600 print:text-black" /> Informasi Pelanggan
+            </h3>
+            <div className="space-y-3">
+              <div>
+                <p className="text-[11px] font-bold text-slate-500 uppercase print:text-gray-500">Nama Penyewa</p>
+                <p className="text-sm font-semibold text-slate-800 mt-0.5 print:text-black">{sewa.nama_penyewa}</p>
+              </div>
+              <div>
+                <p className="text-[11px] font-bold text-slate-500 uppercase print:text-gray-500">No. WhatsApp</p>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <Phone size={14} className="text-slate-400 print:text-gray-500" />
+                  <p className="text-sm font-semibold text-slate-800 print:text-black">{sewa.no_wa || '-'}</p>
+                </div>
+              </div>
+              <div>
+                <p className="text-[11px] font-bold text-slate-500 uppercase print:text-gray-500">Jaminan Identitas</p>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <ShieldCheck size={14} className="text-purple-500 print:text-gray-500" />
+                  <p className="text-sm font-semibold text-slate-800 print:text-black">{sewa.jenis_jaminan || '-'} ({sewa.nomor_jaminan || '-'})</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-purple-200 flex flex-col gap-4 print:border-gray-300 print:shadow-none print:p-4">
+            <h3 className="font-bold text-slate-800 flex items-center gap-2 border-b border-purple-100 pb-3 print:border-gray-200">
+              <Calendar size={18} className="text-purple-600 print:text-black" /> Jadwal & Status
+            </h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-[11px] font-bold text-slate-500 uppercase print:text-gray-500">Tanggal Ambil</p>
+                <p className="text-sm font-semibold text-slate-800 mt-0.5 print:text-black">{new Date(sewa.tanggal_bawa).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+              </div>
+              <div>
+                <p className="text-[11px] font-bold text-slate-500 uppercase print:text-gray-500">Tanggal Kembali</p>
+                <p className="text-sm font-semibold text-slate-800 mt-0.5 print:text-black">{new Date(sewa.tanggal_kembali).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+              </div>
+              <div className="col-span-2">
+                <p className="text-[11px] font-bold text-slate-500 uppercase mb-1 print:text-gray-500">Status Penyewaan</p>
+                <span className={`inline-flex px-3 py-1 text-xs font-bold rounded-lg print:border print:border-gray-400 print:bg-white print:text-black ${
+                  sewa.status === 'selesai' ? 'bg-green-100 text-green-700' :
+                  sewa.status === 'dibawa' ? 'bg-blue-100 text-blue-700' :
+                  'bg-amber-100 text-amber-700'
+                }`}>
+                  {sewa.status.toUpperCase()}
+                </span>
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Info Sewa & Jaminan */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-slate-50 p-4 rounded-xl border border-purple-100">
-          <div>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Jadwal Sewa</span>
-            <div className="text-xs font-bold text-slate-700 flex items-center gap-1">
-              <CalendarDays size={14} className="text-purple-600" />
-              {formatDate(sewa.tanggal_bawa)} s/d {formatDate(sewa.tanggal_kembali)}
-            </div>
+        {/* TABEL BARANG YANG DISEWA */}
+        <div className="bg-white rounded-2xl shadow-sm border border-purple-200 overflow-hidden print:border-gray-300 print:shadow-none">
+          <div className="p-5 border-b border-purple-100 bg-purple-50/50 print:bg-gray-100 print:border-gray-300">
+            <h3 className="font-bold text-slate-800 flex items-center gap-2 print:text-black">
+              <ShoppingBag size={18} className="text-purple-600 print:text-black" /> Rincian Barang
+            </h3>
           </div>
-          <div>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Jaminan Identitas</span>
-            <div className="text-xs font-bold text-slate-700 flex items-center gap-1">
-              <ShieldCheck size={14} className="text-purple-600" />
-              {sewa.jenis_jaminan || 'KTP'} ({sewa.nomor_jaminan || 'Tidak diisi'})
-            </div>
-          </div>
-          <div>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Metode Pembayaran</span>
-            <div className="text-xs font-bold text-slate-700">
-              {sewa.metode_pembayaran || 'Tunai'} ({sewa.status_pembayaran})
-            </div>
-          </div>
-        </div>
-
-        {/* Tabel Item Barang */}
-        <div>
-          <h3 className="font-bold text-slate-800 text-sm mb-3 flex items-center gap-2">
-            <Package size={16} className="text-purple-700" /> Barang Disewa
-          </h3>
-          <div className="border border-purple-100 rounded-xl overflow-hidden">
-            <table className="w-full text-left text-xs text-slate-600">
-              <thead className="bg-purple-50/50 font-semibold text-slate-700 border-b border-purple-100">
+          <div className="overflow-x-auto w-full">
+            <table className="w-full text-left text-sm text-slate-600 print:text-black">
+              <thead className="bg-white text-slate-700 font-semibold border-b border-purple-100 print:border-gray-300">
                 <tr>
-                  <th className="px-4 py-3">Nama Barang</th>
-                  <th className="px-4 py-3 text-center">Jumlah</th>
-                  <th className="px-4 py-3 text-right">Harga Satuan</th>
-                  <th className="px-4 py-3 text-right">Subtotal</th>
+                  <th className="px-6 py-3">Nama Barang</th>
+                  <th className="px-6 py-3 text-center">Harga Satuan</th>
+                  <th className="px-6 py-3 text-center">Qty</th>
+                  <th className="px-6 py-3 text-right">Subtotal</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-purple-50">
-                {items.map((item, idx) => (
-                  <tr key={idx} className="hover:bg-purple-50/30">
-                    <td className="px-4 py-3 font-bold text-slate-800">{item.katalog_barang?.nama_barang || 'Barang'}</td>
-                    <td className="px-4 py-3 text-center">{item.qty} pcs</td>
-                    <td className="px-4 py-3 text-right">Rp {item.harga?.toLocaleString('id-ID')}</td>
-                    <td className="px-4 py-3 text-right font-black text-slate-800">Rp {(item.harga * item.qty).toLocaleString('id-ID')}</td>
+              <tbody className="divide-y divide-purple-50 print:divide-gray-200">
+                {items.map((item, index) => (
+                  <tr key={index} className="hover:bg-slate-50 print:hover:bg-white">
+                    <td className="px-6 py-4 font-semibold text-slate-800 print:text-black">{item.katalog_barang?.nama_barang || 'Item tidak ditemukan'}</td>
+                    <td className="px-6 py-4 text-center">Rp {item.harga.toLocaleString('id-ID')}</td>
+                    <td className="px-6 py-4 text-center font-bold text-purple-700 print:text-black">{item.qty}x</td>
+                    <td className="px-6 py-4 text-right font-semibold text-slate-800 print:text-black">
+                      Rp {(item.harga * item.qty).toLocaleString('id-ID')}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -234,89 +284,54 @@ export default function DetailSewaPage() {
           </div>
         </div>
 
-        {/* Ringkasan Keuangan */}
-        <div className="bg-purple-50/40 p-4 rounded-xl border border-purple-100 space-y-2">
-          <div className="flex justify-between text-xs font-semibold text-slate-600">
-            <span>Total Nilai Sewa:</span>
-            <span>Rp {totalHarga.toLocaleString('id-ID')}</span>
+        {/* RINGKASAN PEMBAYARAN & TOMBOL PELUNASAN */}
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-purple-200 ml-auto w-full md:w-96 print:border-gray-300 print:shadow-none print:p-4">
+          <h3 className="font-bold text-slate-800 flex items-center gap-2 border-b border-purple-100 pb-3 mb-4 print:border-gray-200 print:text-black">
+            <CreditCard size={18} className="text-purple-600 print:text-black" /> Ringkasan Pembayaran
+          </h3>
+          <div className="space-y-3 text-sm print:text-black">
+            <div className="flex justify-between items-center text-slate-600 print:text-black">
+              <span>Metode Bayar</span>
+              <span className="font-semibold text-slate-800 print:text-black">{sewa.metode_pembayaran}</span>
+            </div>
+            <div className="flex justify-between items-center text-slate-600 print:text-black">
+              <span>Total Tagihan</span>
+              <span className="font-bold text-slate-800 print:text-black">Rp {total.toLocaleString('id-ID')}</span>
+            </div>
+            <div className="flex justify-between items-center text-slate-600 print:text-black">
+              <span>Sudah Dibayar (DP)</span>
+              <span className="font-bold text-green-600 print:text-black">Rp {dp.toLocaleString('id-ID')}</span>
+            </div>
+            
+            <div className="pt-3 mt-3 border-t border-dashed border-purple-200 print:border-gray-400 flex justify-between items-center">
+              <span className="font-bold text-slate-800 print:text-black">Sisa Tagihan</span>
+              <span className={`text-lg font-black print:text-black ${sisa > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                {sisa > 0 ? `Rp ${sisa.toLocaleString('id-ID')}` : 'LUNAS'}
+              </span>
+            </div>
+            
+            {/* TOMBOL PELUNASAN */}
+            {sisa > 0 && (
+              <div className="pt-4 print:hidden">
+                <button 
+                  onClick={handlePelunasan}
+                  className="w-full flex items-center justify-center gap-2 bg-green-500 hover:bg-green-600 text-white font-bold py-3 rounded-xl transition-all shadow-sm text-sm"
+                >
+                  <CheckCircle size={18} /> Konfirmasi Pelunasan
+                </button>
+              </div>
+            )}
+
           </div>
-          <div className="flex justify-between text-xs font-semibold text-slate-600">
-            <span>Sudah Dibayar (DP / Awal):</span>
-            <span className="text-green-600 font-bold">Rp {sudahDibayar.toLocaleString('id-ID')}</span>
-          </div>
-          <div className="flex justify-between text-sm font-black pt-2 border-t border-purple-200">
-            <span className="text-slate-800">Sisa Tagihan:</span>
-            <span className={sisaTagihan > 0 ? 'text-red-500 text-base' : 'text-green-600 text-base'}>
-              {sisaTagihan > 0 ? `Rp ${sisaTagihan.toLocaleString('id-ID')}` : 'LUNAS'}
-            </span>
-          </div>
+        </div>
+
+        {/* FOOTER KHUSUS CETAK */}
+        <div className="hidden print:block text-center mt-12 text-sm text-gray-500">
+          <p>Terima kasih telah menyewa di Hera Zealikha.</p>
+          <p>Barang yang sudah disewa harus dikembalikan sesuai tanggal yang telah disepakati.</p>
         </div>
 
       </div>
-
-      {/* MODAL PELUNASAN */}
-      {isModalPelunasanOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm print-hidden">
-          <div className="bg-white w-full max-w-md rounded-2xl shadow-xl overflow-hidden flex flex-col">
-            
-            <div className="p-5 border-b border-purple-100 bg-purple-50 flex justify-between items-center">
-              <h3 className="font-bold text-slate-800 text-base flex items-center gap-2">
-                <Banknote size={18} className="text-green-600" /> Pelunasan Tagihan Sewa
-              </h3>
-              <button onClick={() => setIsModalPelunasanOpen(false)} className="text-slate-400 hover:text-slate-600 text-sm font-bold">✕</button>
-            </div>
-
-            <div className="p-6 space-y-4">
-              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs space-y-1">
-                <div className="flex justify-between"><span className="text-slate-500">Total Harga:</span><span className="font-bold">Rp {totalHarga.toLocaleString('id-ID')}</span></div>
-                <div className="flex justify-between"><span className="text-slate-500">Sudah Dibayar:</span><span className="font-bold text-green-600">Rp {sudahDibayar.toLocaleString('id-ID')}</span></div>
-                <div className="flex justify-between pt-1 border-t border-slate-200 text-sm font-black text-red-500"><span>Sisa Tagihan:</span><span>Rp {sisaTagihan.toLocaleString('id-ID')}</span></div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Nominal Pelunasan (Rp)</label>
-                <input 
-                  type="number" 
-                  value={nominalPelunasan} 
-                  onChange={(e) => setNominalPelunasan(Number(e.target.value))}
-                  className="w-full bg-slate-50 border border-purple-200 text-slate-800 font-black text-lg rounded-xl px-4 py-2.5 outline-none focus:border-purple-600"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Metode Pembayaran</label>
-                <select 
-                  value={metodeBayar} 
-                  onChange={(e) => setMetodeBayar(e.target.value)}
-                  className="w-full bg-slate-50 border border-purple-200 text-slate-800 font-bold text-sm rounded-xl px-4 py-2.5 outline-none focus:border-purple-600"
-                >
-                  <option>Tunai</option>
-                  <option>Transfer</option>
-                  <option>QRIS</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="p-4 border-t border-purple-100 bg-slate-50 flex gap-2">
-              <button 
-                onClick={() => setIsModalPelunasanOpen(false)}
-                className="flex-1 bg-white border border-purple-200 text-slate-600 hover:bg-purple-50 font-bold py-2.5 rounded-xl text-xs transition-colors"
-              >
-                Batal
-              </button>
-              <button 
-                onClick={handlePelunasan}
-                disabled={isSubmitting}
-                className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 rounded-xl text-xs transition-colors shadow-sm disabled:opacity-50"
-              >
-                {isSubmitting ? 'Menyimpan...' : 'Konfirmasi Lunas'}
-              </button>
-            </div>
-
-          </div>
-        </div>
-      )}
-
-    </div>
+    </>
   );
 }
