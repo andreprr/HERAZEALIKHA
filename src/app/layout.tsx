@@ -1,8 +1,11 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
+import { ThemeProvider } from 'next-themes';
 import { Toaster } from 'react-hot-toast';
-import Sidebar from '@/components/Sidebar';
+
+// Import sesuai keinginan Anda
+import MainLayout from '@/components/Sidebar'; 
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -17,14 +20,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    // Hapus suppressHydrationWarning jika sudah tidak pakai ThemeProvider
-    <html lang="en">
-      <body className={`${inter.className} bg-pink-50 text-slate-800`}>
-        <Toaster position="top-center" reverseOrder={false} />
-        
-        {/* Tidak perlu lagi dibungkus <ThemeProvider> */}
-        <Sidebar>{children}</Sidebar>
-        
+    <html lang="en" suppressHydrationWarning>
+      {/* Tambahkan bg-white dan text-slate-800 secara eksplisit di sini */}
+      <body className={`${inter.className} bg-white text-slate-800`} suppressHydrationWarning>
+        <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
+          <Toaster position="top-center" reverseOrder={false} />
+          {/* MainLayout ini sekarang memanggil file Sidebar.tsx Anda */}
+          <MainLayout>{children}</MainLayout>
+        </ThemeProvider>
       </body>
     </html>
   );

@@ -24,6 +24,7 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
 .hide-scrollbar::-webkit-scrollbar {
   display: none;
 }
@@ -40,9 +41,9 @@ body {
   background: transparent;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #fbcfe8; /* pink-200 */
+  background: #e9d5ff; /* purple-200 */
   border-radius: 10px;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #f472b6; /* pink-400 */
+  background: #c084fc; /* purple-400 */
 }

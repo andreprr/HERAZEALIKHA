@@ -4,17 +4,17 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { 
-  LayoutDashboard, CalendarDays, ArrowRightLeft, CalendarClock, 
+  LayoutDashboard, ReceiptText, CalendarDays, ArrowRightLeft,  
   Users, Box, Library, Download, Upload, FileText, Settings,
   Menu, X, ChevronLeft, ChevronRight, UserCircle, Banknote
 } from 'lucide-react';
 
 const menuItems = [
   { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { path: '/sewa', label: 'Sewa', icon: CalendarDays },
+  { path: '/kasir', label: 'Kasir', icon: ReceiptText },
+  { path: '/sewa', label: 'Sewa & Booking', icon: CalendarDays },
   { path: '/transaksi', label: 'Transaksi', icon: ArrowRightLeft },
   { path: '/shift-kas', label: 'Shift Kas', icon: Banknote },
-  { path: '/booking', label: 'Booking', icon: CalendarClock },
   { path: '/pelanggan', label: 'Pelanggan', icon: Users },
   { path: '/inventaris', label: 'Inventaris', icon: Box },
   { path: '/katalog-barang', label: 'Katalog Barang', icon: Library },
@@ -30,13 +30,12 @@ export default function Sidebar({ children }: { children: React.ReactNode }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true); 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false); 
 
-  // Tutup menu mobile otomatis saat pindah halaman
   useEffect(() => {
     setIsMobileMenuOpen(false);
   }, [pathname]);
 
   return (
-    <div className="flex h-screen bg-pink-50 text-slate-800 overflow-hidden font-sans">
+    <div className="flex h-screen bg-white text-slate-800 overflow-hidden font-sans">
       
       {/* OVERLAY MOBILE */}
       {isMobileMenuOpen && (
@@ -48,28 +47,26 @@ export default function Sidebar({ children }: { children: React.ReactNode }) {
 
       {/* SIDEBAR */}
       <aside 
-        className={`fixed lg:static top-0 left-0 h-full z-50 flex flex-col bg-white border-r border-pink-200 shadow-lg lg:shadow-none transition-all duration-300 ease-in-out
+        className={`fixed lg:static top-0 left-0 h-full z-50 flex flex-col bg-white border-r border-purple-100 shadow-sm lg:shadow-none transition-all duration-300 ease-in-out
           ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
           ${isSidebarOpen ? 'w-64' : 'w-[80px]'}
         `}
       >
         <div className="flex items-center justify-between h-20 px-6 shrink-0 border-b border-transparent">
           <Link href="/" className={`flex items-center overflow-hidden transition-all duration-300 ${!isSidebarOpen && 'lg:opacity-0 lg:w-0'}`}>
-            <h1 className="text-xl font-black tracking-widest text-pink-600 whitespace-nowrap">
+            <h1 className="text-xl font-black tracking-widest text-purple-700 whitespace-nowrap">
               HERAZEALIKHA
             </h1>
           </Link>
           
-          {/* Logo saat disusutkan */}
           {!isSidebarOpen && (
             <div className="hidden lg:flex w-full justify-center">
-              <h1 className="text-2xl font-black text-pink-600">H</h1>
+              <h1 className="text-2xl font-black text-purple-700">H</h1>
             </div>
           )}
 
-          {/* Tombol Tutup Mobile */}
           <button 
-            className="lg:hidden text-slate-500 hover:text-pink-600 transition-colors"
+            className="lg:hidden text-slate-500 hover:text-purple-600 transition-colors"
             onClick={() => setIsMobileMenuOpen(false)}
           >
             <X size={24} />
@@ -88,8 +85,8 @@ export default function Sidebar({ children }: { children: React.ReactNode }) {
                 className={`flex items-center h-11 w-full rounded-xl transition-all duration-200 group relative
                   ${isSidebarOpen ? 'justify-start px-4' : 'lg:justify-center px-0'}
                   ${isActive 
-                    ? 'bg-pink-600 text-white font-bold shadow-md shadow-pink-200' 
-                    : 'text-slate-500 hover:bg-pink-50 hover:text-pink-600'
+                    ? 'bg-purple-700 text-white font-bold shadow-md shadow-purple-200' 
+                    : 'text-slate-600 hover:bg-purple-50 hover:text-purple-700'
                   }
                 `}
               >
@@ -104,11 +101,10 @@ export default function Sidebar({ children }: { children: React.ReactNode }) {
           })}
         </div>
 
-        {/* Tombol Collapse Desktop */}
-        <div className="p-4 border-t border-pink-100 hidden lg:flex justify-center">
+        <div className="p-4 border-t border-purple-100 hidden lg:flex justify-center">
           <button 
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-            className="w-full flex items-center justify-center h-10 rounded-xl text-pink-600 bg-pink-50 hover:bg-pink-100 transition-colors"
+            className="w-full flex items-center justify-center h-10 rounded-xl text-purple-700 bg-purple-50 hover:bg-purple-100 transition-colors"
           >
             {isSidebarOpen ? <ChevronLeft size={20} /> : <ChevronRight size={20} />}
           </button>
@@ -116,13 +112,12 @@ export default function Sidebar({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* AREA KONTEN UTAMA */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-white">
         
-        {/* HEADER */}
-        <header className="h-20 flex items-center justify-between px-4 sm:px-8 shrink-0 bg-pink-50">
+        <header className="h-20 flex items-center justify-between px-4 sm:px-8 shrink-0 bg-white border-b border-purple-100">
           <div className="flex items-center gap-4">
             <button 
-              className="lg:hidden p-2 rounded-lg shadow-sm bg-white border border-pink-200 text-slate-500 hover:text-pink-600"
+              className="lg:hidden p-2 rounded-lg shadow-sm bg-white border border-purple-200 text-slate-500 hover:text-purple-700"
               onClick={() => setIsMobileMenuOpen(true)}
             >
               <Menu size={20} />
@@ -130,21 +125,19 @@ export default function Sidebar({ children }: { children: React.ReactNode }) {
           </div>
 
           <div className="flex items-center gap-3 sm:gap-5">
-            {/* Profil Admin */}
-            <div className="flex items-center gap-3 pl-3 sm:pl-5 border-l border-pink-200">
+            <div className="flex items-center gap-3 pl-3 sm:pl-5 border-l border-purple-200">
               <div className="text-right hidden sm:block">
                 <p className="text-sm font-bold text-slate-800 leading-tight">Admin Utama</p>
                 <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Superadmin</p>
               </div>
-              <div className="w-10 h-10 rounded-full bg-pink-100 text-pink-600 border border-pink-200 flex items-center justify-center font-bold">
+              <div className="w-10 h-10 rounded-full bg-purple-100 text-purple-700 border border-purple-200 flex items-center justify-center font-bold">
                 <UserCircle size={24} />
               </div>
             </div>
           </div>
         </header>
 
-        {/* HALAMAN RENDER */}
-        <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-8 pt-0 custom-scrollbar">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-8 pt-6 custom-scrollbar bg-white">
           {children}
         </main>
         
