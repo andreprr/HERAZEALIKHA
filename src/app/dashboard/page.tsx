@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { 
-  Wallet, Package, ArrowUpRight, ArrowDownRight, 
+  Wallet, Package, ArrowUpRight, 
   Activity, Loader2, Calendar, AlertTriangle, Clock, 
   Wrench, CheckCircle, Filter, Users
 } from 'lucide-react';
@@ -18,13 +18,12 @@ export default function DashboardPage() {
   
   const [chartData, setChartData] = useState<any[]>([]);
   
-  // State Finansial & Pelanggan
+  // State Finansial & Pelanggan (Tanpa Pengeluaran)
   const [finStats, setFinStats] = useState({
     totalTransaksi: 0,
     totalRental: 0,
     totalPelanggan: 0,
-    totalPemasukan: 0,
-    totalPengeluaran: 0
+    totalPemasukan: 0
   });
 
   // State Operasional (Snapshot saat ini)
@@ -65,21 +64,25 @@ export default function DashboardPage() {
       if (activeSewa) {
         countSedangDisewa = activeSewa.length;
         activeSewa.forEach(item => {
-          if (item.tanggal_kembali < todayStr) {
+          // Hanya membandingkan tanggal (mengabaikan jam jika formatnya datetime)
+          const tglKembali = item.tanggal_kembali.split(' ')[0]; 
+          if (tglKembali < todayStr) {
             countTerlambat++;
-          } else if (item.tanggal_kembali === todayStr) {
+          } else if (tglKembali === todayStr) {
             countJatuhTempo++;
           }
         });
       }
 
+      // Hitung Barang di Perawatan secara Dinamis
       let countPerawatan = 0;
       try {
-        const { count } = await supabase
-          .from('katalog_barang')
-          .select('*', { count: 'exact', head: true })
-          .eq('status', 'perawatan'); 
-        countPerawatan = count || 0;
+        const { data: rawatData } = await supabase
+          .from('perawatan')
+          .select('qty')
+          .eq('status', 'aktif');
+          
+        countPerawatan = rawatData?.reduce((sum, item) => sum + (item.qty || 1), 0) || 0;
       } catch (e) {}
 
       setOpsStats({
@@ -100,14 +103,7 @@ export default function DashboardPage() {
         .gte('created_at', `${startDateStr}T00:00:00.000Z`)
         .lte('created_at', `${todayStr}T23:59:59.999Z`);
 
-      const { data: pengeluaranData } = await supabase
-        .from('pengeluaran')
-        .select('nominal, created_at')
-        .gte('created_at', `${startDateStr}T00:00:00.000Z`)
-        .lte('created_at', `${todayStr}T23:59:59.999Z`);
-
       let totalPemasukan = 0;
-      let totalPengeluaran = 0;
       let totalTransaksi = sewaData ? sewaData.length : 0;
       const uniqueCustomers = new Set();
 
@@ -121,22 +117,15 @@ export default function DashboardPage() {
         });
       }
 
-      if (pengeluaranData) {
-        pengeluaranData.forEach(item => {
-          totalPengeluaran += (item.nominal || 0);
-        });
-      }
-
       setFinStats({
         totalTransaksi: totalTransaksi,
         totalRental: totalTransaksi, 
         totalPelanggan: uniqueCustomers.size,
-        totalPemasukan: totalPemasukan,
-        totalPengeluaran: totalPengeluaran
+        totalPemasukan: totalPemasukan
       });
 
       // ==========================================
-      // 3. SIAPKAN DATA GRAFIK
+      // 3. SIAPKAN DATA GRAFIK (Tanpa Pengeluaran)
       // ==========================================
       const chartMap: Record<string, any> = {};
       const generatedChartData = [];
@@ -147,7 +136,7 @@ export default function DashboardPage() {
           d.setDate(today.getDate() - i);
           const dateStr = getLocalISODate(d);
           const dayName = d.toLocaleDateString('id-ID', { weekday: 'short' });
-          const entry = { date: dateStr, name: dayName, Pemasukan: 0, Pengeluaran: 0 };
+          const entry = { date: dateStr, name: dayName, Pemasukan: 0 };
           chartMap[dateStr] = entry;
           generatedChartData.push(entry);
         }
@@ -156,7 +145,7 @@ export default function DashboardPage() {
           const d = new Date();
           d.setDate(today.getDate() - (i * 5)); 
           const dateStr = getLocalISODate(d);
-          const entry = { date: dateStr, name: `${d.getDate()}/${d.getMonth()+1}`, Pemasukan: 0, Pengeluaran: 0 };
+          const entry = { date: dateStr, name: `${d.getDate()}/${d.getMonth()+1}`, Pemasukan: 0 };
           chartMap[dateStr] = entry;
           generatedChartData.push(entry);
         }
@@ -166,11 +155,6 @@ export default function DashboardPage() {
       const { data: chartSewaData } = await supabase
         .from('sewa')
         .select('total_harga, dp, status, created_at')
-        .gte('created_at', `${earliestChartDate}T00:00:00.000Z`);
-        
-      const { data: chartPengeluaranData } = await supabase
-        .from('pengeluaran')
-        .select('nominal, created_at')
         .gte('created_at', `${earliestChartDate}T00:00:00.000Z`);
 
       if (chartSewaData) {
@@ -182,19 +166,6 @@ export default function DashboardPage() {
           }
           if (chartMap[targetKey]) {
             chartMap[targetKey].Pemasukan += (item.status === 'selesai' ? (item.total_harga || 0) : (item.dp || 0));
-          }
-        });
-      }
-
-      if (chartPengeluaranData) {
-        chartPengeluaranData.forEach(item => {
-          const dtStr = getLocalISODate(new Date(item.created_at));
-          let targetKey = dtStr;
-          if (filterMode === 'bulanan') {
-            targetKey = Object.keys(chartMap).reduce((prev, curr) => Math.abs(new Date(curr).getTime() - new Date(dtStr).getTime()) < Math.abs(new Date(prev).getTime() - new Date(dtStr).getTime()) ? curr : prev);
-          }
-          if (chartMap[targetKey]) {
-            chartMap[targetKey].Pengeluaran += (item.nominal || 0);
           }
         });
       }
@@ -228,7 +199,7 @@ export default function DashboardPage() {
           </div>
           <div>
             <h2 className="text-xl font-bold text-slate-800 truncate">Dashboard Ringkasan</h2>
-            <p className="text-xs font-semibold text-slate-500 mt-1">Pantau performa transaksi, pendapatan, dan pengeluaran.</p>
+            <p className="text-xs font-semibold text-slate-500 mt-1">Pantau performa transaksi dan pendapatan.</p>
           </div>
         </div>
         
@@ -291,8 +262,8 @@ export default function DashboardPage() {
       {/* 2. STATISTIK FINANSIAL & PELANGGAN (Berdasarkan Filter) */}
       <div>
         <h3 className="text-sm font-bold text-slate-700 mb-3 ml-1">Ringkasan Kinerja ({filterMode === 'harian' ? 'Hari Ini' : 'Bulan Ini'})</h3>
-        {/* Menggunakan grid 5 kolom pada layar besar */}
-        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
+        {/* Ubah grid ke 4 kolom karena Pengeluaran dihapus */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           
           <div className="bg-white p-5 rounded-2xl shadow-sm border border-purple-200 flex flex-col justify-center relative overflow-hidden group hover:border-purple-400 transition-colors">
             <div className="absolute right-4 -bottom-4 opacity-5 pointer-events-none text-purple-600 group-hover:scale-110 transition-transform"><Activity size={100} /></div>
@@ -330,15 +301,6 @@ export default function DashboardPage() {
             <p className="text-2xl font-black text-slate-800 relative z-10">Rp {finStats.totalPemasukan.toLocaleString('id-ID')}</p>
           </div>
 
-          <div className="bg-white p-5 rounded-2xl shadow-sm border border-purple-200 flex flex-col justify-center relative overflow-hidden group hover:border-red-400 transition-colors">
-            <div className="absolute right-4 -bottom-4 opacity-5 pointer-events-none text-red-600 group-hover:scale-110 transition-transform"><ArrowDownRight size={100} /></div>
-            <div className="flex items-center gap-3 mb-3 relative z-10">
-              <div className="p-2.5 bg-red-100 rounded-xl text-red-600 shrink-0"><ArrowDownRight size={20} /></div>
-              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Pengeluaran</p>
-            </div>
-            <p className="text-2xl font-black text-slate-800 relative z-10">Rp {finStats.totalPengeluaran.toLocaleString('id-ID')}</p>
-          </div>
-
         </div>
       </div>
 
@@ -346,9 +308,9 @@ export default function DashboardPage() {
       <div className="bg-white p-5 md:p-6 rounded-2xl shadow-sm border border-purple-200 w-full mt-2">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h3 className="font-bold text-slate-800 text-lg">Grafik Arus Kas</h3>
+            <h3 className="font-bold text-slate-800 text-lg">Grafik Pemasukan</h3>
             <p className="text-xs text-slate-500 mt-1">
-              Tren Pemasukan & Pengeluaran {filterMode === 'harian' ? '7 hari terakhir' : 'bulan ini'}.
+              Tren Pemasukan {filterMode === 'harian' ? '7 hari terakhir' : 'bulan ini'}.
             </p>
           </div>
         </div>
@@ -384,15 +346,6 @@ export default function DashboardPage() {
                 name="Pemasukan"
                 dataKey="Pemasukan" 
                 stroke="#16a34a" 
-                strokeWidth={3}
-                dot={{ r: 4, strokeWidth: 2 }}
-                activeDot={{ r: 6 }}
-              />
-              <Line 
-                type="monotone" 
-                name="Pengeluaran"
-                dataKey="Pengeluaran" 
-                stroke="#ef4444" 
                 strokeWidth={3}
                 dot={{ r: 4, strokeWidth: 2 }}
                 activeDot={{ r: 6 }}

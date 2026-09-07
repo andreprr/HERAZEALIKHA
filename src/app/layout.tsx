@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
-import { ThemeProvider } from 'next-themes';
 import { Toaster } from 'react-hot-toast';
 
 // Import sesuai keinginan Anda
@@ -20,14 +19,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" >
       {/* Tambahkan bg-white dan text-slate-800 secara eksplisit di sini */}
-      <body className={`${inter.className} bg-white text-slate-800`} suppressHydrationWarning>
-        <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
+      <body className={`${inter.className} bg-white text-slate-800`} >
+    
           <Toaster position="top-center" reverseOrder={false} />
           {/* MainLayout ini sekarang memanggil file Sidebar.tsx Anda */}
           <MainLayout>{children}</MainLayout>
-        </ThemeProvider>
+        
       </body>
     </html>
   );

@@ -6,7 +6,8 @@ import { supabase } from '@/lib/supabase';
 import toast from 'react-hot-toast';
 import { 
   ArrowLeft, MessageCircle, FileText, User, 
-  Calendar, ShoppingBag, CreditCard, Loader2, ShieldCheck, Phone, Printer, CheckCircle
+  Calendar, ShoppingBag, CreditCard, Loader2, ShieldCheck, Phone, Printer, CheckCircle,
+  PackageOpen, WashingMachine, ShieldAlert, Settings2, Upload
 } from 'lucide-react';
 
 export default function DetailSewaPage() {
@@ -17,6 +18,11 @@ export default function DetailSewaPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [sewa, setSewa] = useState<any>(null);
   const [items, setItems] = useState<any[]>([]);
+
+  const [showReturnModal, setShowReturnModal] = useState(false);
+  const [returnItems, setReturnItems] = useState<any[]>([]);
+  const [isReturning, setIsReturning] = useState(false);
+  const [isUploadingBukti, setIsUploadingBukti] = useState(false);
 
   useEffect(() => {
     if (id) fetchDetail();
@@ -37,7 +43,7 @@ export default function DetailSewaPage() {
         .from('sewa_items')
         .select(`
           *,
-          katalog_barang (nama_barang)
+          katalog_barang (id, nama_barang, stok, disewa_count)
         `)
         .eq('sewa_id', id);
 
@@ -52,56 +58,150 @@ export default function DetailSewaPage() {
     }
   };
 
-  // Fungsi Kirim WA (Teks sangat bersih tanpa simbol apapun)
-  const handleKirimWA = () => {
-    if (!sewa) return;
-    if (!sewa.no_wa || sewa.no_wa === '-') {
-      toast.error('Nomor WhatsApp pelanggan tidak tersedia.');
+  // Fungsi Upload Bukti Pembayaran
+  const handleUploadBukti = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingBukti(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `bukti-${id}-${Date.now()}.${fileExt}`;
+
+      // Upload ke bucket "bukti-transfer"
+      const { error: uploadError } = await supabase.storage
+        .from('bukti-transfer')
+        .upload(fileName, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data: publicUrlData } = supabase.storage
+        .from('bukti-transfer')
+        .getPublicUrl(fileName);
+
+      const buktiUrl = publicUrlData.publicUrl;
+
+      // Update tabel sewa
+      const { error: updateError } = await supabase
+        .from('sewa')
+        .update({ bukti_pembayaran: buktiUrl })
+        .eq('id', id);
+
+      if (updateError) throw updateError;
+
+      toast.success('Bukti pembayaran berhasil diunggah!');
+      fetchDetail(); // Refresh data
+    } catch (error: any) {
+      toast.error('Gagal mengunggah bukti: ' + error.message);
+    } finally {
+      setIsUploadingBukti(false);
+    }
+  };
+
+  // Membuka Modal Pengembalian (Dengan VALIDASI Bukti Pembayaran)
+  const handleOpenReturnModal = () => {
+    const method = (sewa.metode_pembayaran || '').toLowerCase();
+    const isCash = method.includes('cash') || method.includes('tunai');
+    
+    if (!isCash && !sewa.bukti_pembayaran) {
+      toast.error('Harap unggah bukti pembayaran Transfer/QRIS terlebih dahulu!', { duration: 4000 });
       return;
     }
 
-    let phone = sewa.no_wa.replace(/\D/g, '');
-    if (phone.startsWith('0')) {
-      phone = '62' + phone.substring(1);
+    const initialReturnData = items.map(item => ({
+      ...item,
+      kondisi: 'siap_sewa' 
+    }));
+    setReturnItems(initialReturnData);
+    setShowReturnModal(true);
+  };
+
+  const handleKondisiChange = (index: number, newKondisi: string) => {
+    const updated = [...returnItems];
+    updated[index].kondisi = newKondisi;
+    setReturnItems(updated);
+  };
+
+  const submitPengembalian = async () => {
+    setIsReturning(true);
+    try {
+      const { error: sewaErr } = await supabase.from('sewa').update({ status: 'selesai' }).eq('id', id);
+      if (sewaErr) throw sewaErr;
+
+      for (const item of returnItems) {
+        const barangId = item.katalog_barang.id;
+        const qty = item.qty;
+        const kondisi = item.kondisi;
+
+        const { data: kb } = await supabase.from('katalog_barang').select('stok, disewa_count').eq('id', barangId).single();
+        const currentStok = kb?.stok || 0;
+        const currentDisewaCount = kb?.disewa_count || 0;
+
+        const newDisewaCount = currentDisewaCount + qty;
+        const newStok = kondisi === 'siap_sewa' ? currentStok + qty : currentStok;
+
+        await supabase.from('katalog_barang').update({ 
+          stok: newStok, 
+          disewa_count: newDisewaCount 
+        }).eq('id', barangId);
+
+        if (kondisi !== 'siap_sewa') {
+          await supabase.from('perawatan').insert([{
+            barang_id: barangId,
+            jenis: kondisi,
+            qty: qty,
+            catatan: `Dari pengembalian invoice: ${sewa.invoice}`,
+            status: 'aktif'
+          }]);
+        }
+      }
+
+      toast.success('Pengembalian berhasil diproses!');
+      setShowReturnModal(false);
+      fetchDetail(); 
+
+    } catch (error) {
+      toast.error('Gagal memproses pengembalian barang.');
+    } finally {
+      setIsReturning(false);
+    }
+  };
+
+  // Fungsi Pelunasan (SEKARANG DENGAN VALIDASI)
+  const handlePelunasan = async () => {
+    // 1. Cek dulu apakah wajib upload bukti
+    const method = (sewa.metode_pembayaran || '').toLowerCase();
+    const isCash = method.includes('cash') || method.includes('tunai');
+    
+    // Jika BUKAN cash, dan BUKTI KOSONG, maka tolak proses pelunasan!
+    if (!isCash && !sewa.bukti_pembayaran) {
+      toast.error('Harap unggah bukti pembayaran Transfer/QRIS terlebih dahulu untuk melakukan pelunasan!', { duration: 4000 });
+      return; // Berhenti di sini, modal konfirmasi tidak akan muncul
     }
 
-    const pesan = `Halo Kak ${sewa.nama_penyewa},
-    
-Berikut adalah lampiran PDF struk invoice penyewaan perlengkapan dari HERAZEALIKHA. 
-
-Mohon disimpan dan ditunjukkan saat pengambilan atau pengembalian barang ya Kak. Terima kasih!`;
-
-    const encodedPesan = encodeURIComponent(pesan);
-    window.open(`https://wa.me/${phone}?text=${encodedPesan}`, '_blank');
-  };
-
-  // Fungsi Cetak Struk (Simpan sebagai PDF)
-  const handleCetak = () => {
-    window.print();
-  };
-
-  // Fungsi Pelunasan Pembayaran
-  const handlePelunasan = async () => {
     if (!window.confirm('Apakah Anda yakin pelanggan ini sudah melunasi sisa tagihannya?')) return;
     
     setIsLoading(true);
     try {
-      const { error } = await supabase
-        .from('sewa')
-        .update({ 
-          dp: sewa.total_harga, // Update DP menjadi sama dengan total harga (Lunas)
-          status_pembayaran: 'diterima'
-        })
-        .eq('id', id);
+      const { error } = await supabase.from('sewa').update({ 
+        dp: sewa.total_harga, 
+        status_pembayaran: 'diterima'
+      }).eq('id', id);
 
       if (error) throw error;
-      
       toast.success('Pembayaran berhasil dilunasi!');
-      fetchDetail(); // Refresh data
+      fetchDetail(); 
     } catch (error) {
       toast.error('Gagal memproses pelunasan.');
       setIsLoading(false);
     }
+  };
+
+  const handleKirimWA = () => { 
+    let phone = sewa.no_wa.replace(/\D/g, '');
+    if (phone.startsWith('0')) phone = '62' + phone.substring(1);
+    const pesan = `Halo Kak ${sewa.nama_penyewa},\n\nBerikut adalah lampiran PDF struk/invoice dari HERAZEALIKHA.\n\nMohon disimpan. Terima kasih!`;
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(pesan)}`, '_blank');
   };
 
   if (isLoading) {
@@ -118,42 +218,29 @@ Mohon disimpan dan ditunjukkan saat pengambilan atau pengembalian barang ya Kak.
   const total = sewa.total_harga || 0;
   const dp = sewa.dp || 0;
   const sisa = total - dp;
+  
+  // Mengecek apakah metode bayar perlu bukti (Bukan Cash/Tunai)
+  const isMethodRequiresProof = sewa.metode_pembayaran && !sewa.metode_pembayaran.toLowerCase().includes('cash') && !sewa.metode_pembayaran.toLowerCase().includes('tunai');
 
   return (
     <>
-      {/* CSS Injection Khusus Cetak: Menyembunyikan Sidebar & Topbar secara paksa */}
       <style dangerouslySetInnerHTML={{
         __html: `
           @media print {
-            body * {
-              visibility: hidden;
-            }
-            #area-cetak, #area-cetak * {
-              visibility: visible;
-            }
-            #area-cetak {
-              position: absolute;
-              left: 0;
-              top: 0;
-              width: 100%;
-              padding: 20px;
-            }
-            .print\\:hidden {
-              display: none !important;
-            }
+            body * { visibility: hidden; }
+            #area-cetak, #area-cetak * { visibility: visible; }
+            #area-cetak { position: absolute; left: 0; top: 0; width: 100%; padding: 20px; }
+            .print\\:hidden { display: none !important; }
           }
         `
       }} />
 
       <div id="area-cetak" className="flex flex-col gap-6 min-h-screen pb-24 pt-2 w-full max-w-4xl mx-auto bg-white print:bg-white print:pb-0">
         
-        {/* HEADER & AKSI - Disembunyikan saat dicetak (print:hidden) */}
+        {/* HEADER & AKSI ATAS */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full bg-white p-5 rounded-2xl shadow-sm border border-purple-200 print:hidden">
           <div className="flex items-center gap-4">
-            <button 
-              onClick={() => router.push('/sewa')}
-              className="p-2.5 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-xl transition-colors border border-slate-200"
-            >
+            <button onClick={() => router.push('/sewa')} className="p-2.5 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-xl transition-colors border border-slate-200">
               <ArrowLeft size={18} />
             </button>
             <div>
@@ -163,64 +250,32 @@ Mohon disimpan dan ditunjukkan saat pengambilan atau pengembalian barang ya Kak.
               <p className="text-sm font-semibold text-slate-500 mt-1">{sewa.invoice}</p>
             </div>
           </div>
-
           <div className="flex flex-wrap items-center gap-2">
-            <button 
-              onClick={handleKirimWA}
-              className="flex flex-1 sm:flex-none items-center justify-center gap-2 bg-green-500 hover:bg-green-600 text-white font-bold py-2.5 px-5 rounded-xl text-sm transition-transform hover:scale-[1.02] shadow-sm"
-            >
-              <MessageCircle size={18} />
-              Buka Chat WA
+            <button onClick={handleKirimWA} className="flex flex-1 sm:flex-none items-center justify-center gap-2 bg-green-500 hover:bg-green-600 text-white font-bold py-2.5 px-5 rounded-xl text-sm transition-transform hover:scale-[1.02] shadow-sm">
+              <MessageCircle size={18} /> Chat WA
             </button>
-
-            <button 
-              onClick={handleCetak}
-              className="flex flex-1 sm:flex-none items-center justify-center gap-2 bg-purple-700 hover:bg-purple-800 text-white font-bold py-2.5 px-5 rounded-xl text-sm transition-transform hover:scale-[1.02] shadow-sm"
-            >
-              <Printer size={18} />
-              Cetak (Save PDF)
+            <button onClick={() => window.print()} className="flex flex-1 sm:flex-none items-center justify-center gap-2 bg-purple-700 hover:bg-purple-800 text-white font-bold py-2.5 px-5 rounded-xl text-sm transition-transform hover:scale-[1.02] shadow-sm">
+              <Printer size={18} /> Cetak (PDF)
             </button>
           </div>
         </div>
 
-        {/* TAMPILAN KHUSUS CETAK: Header Toko */}
         <div className="hidden print:flex print:flex-col print:items-center text-center mb-6 pb-4 border-b-2 border-dashed border-gray-300">
-          <img 
-            src="/logo.jpeg" 
-            alt="Hera Zealikha Logo" 
-            className="h-20 w-auto mb-2 object-contain"
-            style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as React.CSSProperties} 
-          />
+          <img src="/logo.jpeg" alt="Logo" className="h-20 w-auto mb-2 object-contain" style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as React.CSSProperties} />
           <h1 className="text-2xl font-black text-black">Hera Zealikha</h1>
           <p className="text-sm text-gray-600">Sewa Gaun & Perlengkapan</p>
           <p className="text-xs text-gray-500 mt-1">Invoice: {sewa.invoice}</p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 print:grid-cols-2 print:gap-4">
-          
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-purple-200 flex flex-col gap-4 print:border-gray-300 print:shadow-none print:p-4">
             <h3 className="font-bold text-slate-800 flex items-center gap-2 border-b border-purple-100 pb-3 print:border-gray-200">
               <User size={18} className="text-purple-600 print:text-black" /> Informasi Pelanggan
             </h3>
             <div className="space-y-3">
-              <div>
-                <p className="text-[11px] font-bold text-slate-500 uppercase print:text-gray-500">Nama Penyewa</p>
-                <p className="text-sm font-semibold text-slate-800 mt-0.5 print:text-black">{sewa.nama_penyewa}</p>
-              </div>
-              <div>
-                <p className="text-[11px] font-bold text-slate-500 uppercase print:text-gray-500">No. WhatsApp</p>
-                <div className="flex items-center gap-1.5 mt-0.5">
-                  <Phone size={14} className="text-slate-400 print:text-gray-500" />
-                  <p className="text-sm font-semibold text-slate-800 print:text-black">{sewa.no_wa || '-'}</p>
-                </div>
-              </div>
-              <div>
-                <p className="text-[11px] font-bold text-slate-500 uppercase print:text-gray-500">Jaminan Identitas</p>
-                <div className="flex items-center gap-1.5 mt-0.5">
-                  <ShieldCheck size={14} className="text-purple-500 print:text-gray-500" />
-                  <p className="text-sm font-semibold text-slate-800 print:text-black">{sewa.jenis_jaminan || '-'} ({sewa.nomor_jaminan || '-'})</p>
-                </div>
-              </div>
+              <div><p className="text-[11px] font-bold text-slate-500 uppercase">Nama Penyewa</p><p className="text-sm font-semibold text-slate-800">{sewa.nama_penyewa}</p></div>
+              <div><p className="text-[11px] font-bold text-slate-500 uppercase">No. WhatsApp</p><p className="text-sm font-semibold text-slate-800">{sewa.no_wa || '-'}</p></div>
+              <div><p className="text-[11px] font-bold text-slate-500 uppercase">Jaminan Identitas</p><p className="text-sm font-semibold text-slate-800">{sewa.jenis_jaminan || '-'} ({sewa.nomor_jaminan || '-'})</p></div>
             </div>
           </div>
 
@@ -229,20 +284,13 @@ Mohon disimpan dan ditunjukkan saat pengambilan atau pengembalian barang ya Kak.
               <Calendar size={18} className="text-purple-600 print:text-black" /> Jadwal & Status
             </h3>
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-[11px] font-bold text-slate-500 uppercase print:text-gray-500">Tanggal Ambil</p>
-                <p className="text-sm font-semibold text-slate-800 mt-0.5 print:text-black">{new Date(sewa.tanggal_bawa).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
-              </div>
-              <div>
-                <p className="text-[11px] font-bold text-slate-500 uppercase print:text-gray-500">Tanggal Kembali</p>
-                <p className="text-sm font-semibold text-slate-800 mt-0.5 print:text-black">{new Date(sewa.tanggal_kembali).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
-              </div>
+              <div><p className="text-[11px] font-bold text-slate-500 uppercase">Tgl Ambil</p><p className="text-sm font-semibold text-slate-800 mt-0.5">{new Date(sewa.tanggal_bawa).toLocaleDateString('id-ID')}</p></div>
+              <div><p className="text-[11px] font-bold text-slate-500 uppercase">Tgl Kembali</p><p className="text-sm font-semibold text-slate-800 mt-0.5">{new Date(sewa.tanggal_kembali).toLocaleDateString('id-ID')}</p></div>
               <div className="col-span-2">
-                <p className="text-[11px] font-bold text-slate-500 uppercase mb-1 print:text-gray-500">Status Penyewaan</p>
+                <p className="text-[11px] font-bold text-slate-500 uppercase mb-1">Status Penyewaan</p>
                 <span className={`inline-flex px-3 py-1 text-xs font-bold rounded-lg print:border print:border-gray-400 print:bg-white print:text-black ${
                   sewa.status === 'selesai' ? 'bg-green-100 text-green-700' :
-                  sewa.status === 'dibawa' ? 'bg-blue-100 text-blue-700' :
-                  'bg-amber-100 text-amber-700'
+                  sewa.status === 'dibawa' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'
                 }`}>
                   {sewa.status.toUpperCase()}
                 </span>
@@ -251,7 +299,6 @@ Mohon disimpan dan ditunjukkan saat pengambilan atau pengembalian barang ya Kak.
           </div>
         </div>
 
-        {/* TABEL BARANG YANG DISEWA */}
         <div className="bg-white rounded-2xl shadow-sm border border-purple-200 overflow-hidden print:border-gray-300 print:shadow-none">
           <div className="p-5 border-b border-purple-100 bg-purple-50/50 print:bg-gray-100 print:border-gray-300">
             <h3 className="font-bold text-slate-800 flex items-center gap-2 print:text-black">
@@ -261,12 +308,7 @@ Mohon disimpan dan ditunjukkan saat pengambilan atau pengembalian barang ya Kak.
           <div className="overflow-x-auto w-full">
             <table className="w-full text-left text-sm text-slate-600 print:text-black">
               <thead className="bg-white text-slate-700 font-semibold border-b border-purple-100 print:border-gray-300">
-                <tr>
-                  <th className="px-6 py-3">Nama Barang</th>
-                  <th className="px-6 py-3 text-center">Harga Satuan</th>
-                  <th className="px-6 py-3 text-center">Qty</th>
-                  <th className="px-6 py-3 text-right">Subtotal</th>
-                </tr>
+                <tr><th className="px-6 py-3">Nama Barang</th><th className="px-6 py-3 text-center">Harga Satuan</th><th className="px-6 py-3 text-center">Qty</th><th className="px-6 py-3 text-right">Subtotal</th></tr>
               </thead>
               <tbody className="divide-y divide-purple-50 print:divide-gray-200">
                 {items.map((item, index) => (
@@ -274,9 +316,7 @@ Mohon disimpan dan ditunjukkan saat pengambilan atau pengembalian barang ya Kak.
                     <td className="px-6 py-4 font-semibold text-slate-800 print:text-black">{item.katalog_barang?.nama_barang || 'Item tidak ditemukan'}</td>
                     <td className="px-6 py-4 text-center">Rp {item.harga.toLocaleString('id-ID')}</td>
                     <td className="px-6 py-4 text-center font-bold text-purple-700 print:text-black">{item.qty}x</td>
-                    <td className="px-6 py-4 text-right font-semibold text-slate-800 print:text-black">
-                      Rp {(item.harga * item.qty).toLocaleString('id-ID')}
-                    </td>
+                    <td className="px-6 py-4 text-right font-semibold text-slate-800 print:text-black">Rp {(item.harga * item.qty).toLocaleString('id-ID')}</td>
                   </tr>
                 ))}
               </tbody>
@@ -284,54 +324,122 @@ Mohon disimpan dan ditunjukkan saat pengambilan atau pengembalian barang ya Kak.
           </div>
         </div>
 
-        {/* RINGKASAN PEMBAYARAN & TOMBOL PELUNASAN */}
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-purple-200 ml-auto w-full md:w-96 print:border-gray-300 print:shadow-none print:p-4">
+        {/* RINGKASAN PEMBAYARAN */}
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-purple-200 ml-auto w-full md:w-[28rem] print:border-gray-300 print:shadow-none print:p-4">
           <h3 className="font-bold text-slate-800 flex items-center gap-2 border-b border-purple-100 pb-3 mb-4 print:border-gray-200 print:text-black">
             <CreditCard size={18} className="text-purple-600 print:text-black" /> Ringkasan Pembayaran
           </h3>
           <div className="space-y-3 text-sm print:text-black">
-            <div className="flex justify-between items-center text-slate-600 print:text-black">
-              <span>Metode Bayar</span>
-              <span className="font-semibold text-slate-800 print:text-black">{sewa.metode_pembayaran}</span>
-            </div>
-            <div className="flex justify-between items-center text-slate-600 print:text-black">
-              <span>Total Tagihan</span>
-              <span className="font-bold text-slate-800 print:text-black">Rp {total.toLocaleString('id-ID')}</span>
-            </div>
-            <div className="flex justify-between items-center text-slate-600 print:text-black">
-              <span>Sudah Dibayar (DP)</span>
-              <span className="font-bold text-green-600 print:text-black">Rp {dp.toLocaleString('id-ID')}</span>
-            </div>
-            
+            <div className="flex justify-between items-center text-slate-600 print:text-black"><span>Metode Bayar</span><span className="font-bold text-slate-800 print:text-black">{sewa.metode_pembayaran}</span></div>
+            <div className="flex justify-between items-center text-slate-600 print:text-black"><span>Total Tagihan</span><span className="font-bold text-slate-800 print:text-black">Rp {total.toLocaleString('id-ID')}</span></div>
+            <div className="flex justify-between items-center text-slate-600 print:text-black"><span>Sudah Dibayar (DP)</span><span className="font-bold text-green-600 print:text-black">Rp {dp.toLocaleString('id-ID')}</span></div>
             <div className="pt-3 mt-3 border-t border-dashed border-purple-200 print:border-gray-400 flex justify-between items-center">
               <span className="font-bold text-slate-800 print:text-black">Sisa Tagihan</span>
-              <span className={`text-lg font-black print:text-black ${sisa > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                {sisa > 0 ? `Rp ${sisa.toLocaleString('id-ID')}` : 'LUNAS'}
-              </span>
+              <span className={`text-lg font-black print:text-black ${sisa > 0 ? 'text-red-600' : 'text-green-600'}`}>{sisa > 0 ? `Rp ${sisa.toLocaleString('id-ID')}` : 'LUNAS'}</span>
             </div>
             
-            {/* TOMBOL PELUNASAN */}
+            {/* FITUR UPLOAD BUKTI (JIKA BUKAN CASH) */}
+            {isMethodRequiresProof && (
+              <div className="pt-4 mt-3 border-t border-dashed border-purple-200 print:hidden">
+                <span className="block font-bold text-slate-800 mb-2">Bukti Pembayaran</span>
+                {sewa.bukti_pembayaran ? (
+                  <div className="relative group">
+                    <a href={sewa.bukti_pembayaran} target="_blank" rel="noreferrer">
+                      <img src={sewa.bukti_pembayaran} alt="Bukti Pembayaran" className="w-full h-40 object-cover rounded-xl border border-slate-200 hover:opacity-90 transition-opacity" />
+                    </a>
+                    <p className="text-[10px] text-slate-500 mt-1.5 text-center">Klik gambar untuk memperbesar</p>
+                  </div>
+                ) : (
+                  <div>
+                    <label className="flex items-center justify-center gap-2 w-full px-4 py-3 bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold rounded-xl cursor-pointer border border-purple-200 transition-colors">
+                      {isUploadingBukti ? <Loader2 className="animate-spin" size={18} /> : <Upload size={18} />}
+                      {isUploadingBukti ? 'Mengunggah...' : 'Unggah Bukti (Wajib)'}
+                      <input type="file" accept="image/*" className="hidden" onChange={handleUploadBukti} disabled={isUploadingBukti} />
+                    </label>
+                    <p className="text-[10px] text-red-500 mt-1.5 text-center font-semibold">* Bukti wajib diunggah untuk menyelesaikan sewa / pelunasan.</p>
+                  </div>
+                )}
+              </div>
+            )}
+
             {sisa > 0 && (
               <div className="pt-4 print:hidden">
-                <button 
-                  onClick={handlePelunasan}
-                  className="w-full flex items-center justify-center gap-2 bg-green-500 hover:bg-green-600 text-white font-bold py-3 rounded-xl transition-all shadow-sm text-sm"
-                >
+                <button onClick={handlePelunasan} className="w-full flex items-center justify-center gap-2 bg-slate-100 hover:bg-green-100 text-slate-700 hover:text-green-700 font-bold py-3 rounded-xl transition-all shadow-sm text-sm border border-slate-200 hover:border-green-300">
                   <CheckCircle size={18} /> Konfirmasi Pelunasan
                 </button>
               </div>
             )}
-
           </div>
         </div>
 
-        {/* FOOTER KHUSUS CETAK */}
-        <div className="hidden print:block text-center mt-12 text-sm text-gray-500">
-          <p>Terima kasih telah menyewa di Hera Zealikha.</p>
-          <p>Barang yang sudah disewa harus dikembalikan sesuai tanggal yang telah disepakati.</p>
-        </div>
-
+        {/* AKSI BAWAH: TOMBOL PENGEMBALIAN & SELESAI */}
+        {sewa.status === 'dibawa' && (
+          <div className="mt-8 border-t border-purple-100 pt-8 print:hidden flex justify-end">
+            <button 
+              onClick={handleOpenReturnModal}
+              className="flex items-center gap-2 bg-pink-600 hover:bg-pink-700 text-white font-bold py-4 px-8 rounded-2xl shadow-lg hover:shadow-xl transition-all hover:-translate-y-1"
+            >
+              <PackageOpen size={20} />
+              Proses Pengembalian Barang
+            </button>
+          </div>
+        )}
       </div>
+
+      {/* MODAL PENGEMBALIAN BARANG (POP-UP) */}
+      {showReturnModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 print:hidden">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            
+            <div className="p-6 border-b border-purple-100 bg-purple-50/50">
+              <h3 className="text-xl font-bold text-slate-800">Cek Kondisi Barang Kembali</h3>
+              <p className="text-sm text-slate-500 mt-1">Pilih status barang. Barang rusak/kotor akan masuk daftar perawatan.</p>
+            </div>
+            
+            <div className="p-6 overflow-y-auto flex-1 space-y-4">
+              {returnItems.map((item, index) => (
+                <div key={item.id} className="p-4 border border-slate-200 rounded-xl bg-slate-50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <p className="font-bold text-slate-800">{item.katalog_barang?.nama_barang}</p>
+                    <p className="text-xs text-slate-500 font-semibold mt-0.5">Disewa sebanyak: {item.qty} pcs</p>
+                  </div>
+                  
+                  <select 
+                    value={item.kondisi}
+                    onChange={(e) => handleKondisiChange(index, e.target.value)}
+                    className="w-full sm:w-48 px-3 py-2.5 rounded-lg border border-slate-300 text-sm font-semibold text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  >
+                    <option value="siap_sewa">✅ Aman (Siap Sewa)</option>
+                    <option value="laundry">🧺 Perlu Laundry</option>
+                    <option value="perbaikan">🔧 Perlu Perbaikan</option>
+                    <option value="karantina">⚠️ Karantina (Rusak)</option>
+                  </select>
+                </div>
+              ))}
+            </div>
+
+            <div className="p-6 border-t border-slate-100 bg-white flex justify-end gap-3 shrink-0">
+              <button 
+                disabled={isReturning}
+                onClick={() => setShowReturnModal(false)}
+                className="px-6 py-2.5 rounded-xl font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
+              >
+                Batal
+              </button>
+              <button 
+                disabled={isReturning}
+                onClick={submitPengembalian}
+                className="px-6 py-2.5 rounded-xl font-bold text-white bg-pink-600 hover:bg-pink-700 transition-colors flex items-center gap-2"
+              >
+                {isReturning ? <Loader2 size={18} className="animate-spin"/> : <CheckCircle size={18} />}
+                Simpan & Selesaikan Transaksi
+              </button>
+            </div>
+            
+          </div>
+        </div>
+      )}
+
     </>
   );
 }

@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase';
 import toast from 'react-hot-toast';
 import { 
   Search, Plus, Minus, ShoppingCart, User, 
-  Save, Package, Loader2, Store, ShieldCheck, Lock
+  Save, Package, Loader2, Store, ShieldCheck, Lock, Upload
 } from 'lucide-react';
 
 export default function KasirPage() {
@@ -30,19 +30,25 @@ export default function KasirPage() {
   const [jenisJaminan, setJenisJaminan] = useState('KTP');
   const [nomorJaminan, setNomorJaminan] = useState('');
 
+  // STATE TANGGAL & JAM
   const [tanggalBawa, setTanggalBawa] = useState(new Date().toISOString().split('T')[0]);
+  const [jamBawa, setJamBawa] = useState(new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }));
   const [tanggalKembali, setTanggalKembali] = useState('');
+  const [jamKembali, setJamKembali] = useState('17:00'); // Default jam kembali (sore)
+
   const [dp, setDp] = useState<number | ''>('');
   const [metodePembayaran, setMetodePembayaran] = useState('Tunai');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // State Upload Bukti Pembayaran
+  const [compressedFile, setCompressedFile] = useState<File | null>(null);
+  const [previewImage, setPreviewImage] = useState<string>('');
+
   useEffect(() => {
-    // Cek status shift saat halaman dimuat
     const shiftStatus = localStorage.getItem('herazealikha_shift_status');
     if (shiftStatus === 'open') {
       setIsShiftOpen(true);
     }
-
     fetchData();
   }, []);
 
@@ -92,11 +98,50 @@ export default function KasirPage() {
     setCart(cart.map(i => i.id === id ? { ...i, qty: newQty } : i));
   };
 
+  // Kompres Gambar Otomatis
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = document.createElement('img');
+      img.src = event.target?.result as string;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+
+        const MAX_WIDTH = 900;
+        if (width > MAX_WIDTH) {
+          height = Math.round((height * MAX_WIDTH) / width);
+          width = MAX_WIDTH;
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+
+        canvas.toBlob((blob) => {
+          if (!blob) return toast.error('Gagal mengompres gambar.');
+          const compressed = new File([blob], file.name.replace(/\.[^/.]+$/, "") + ".jpg", {
+            type: 'image/jpeg',
+            lastModified: Date.now(),
+          });
+
+          setCompressedFile(compressed);
+          setPreviewImage(URL.createObjectURL(compressed));
+        }, 'image/jpeg', 0.7);
+      };
+    };
+  };
+
   const totalHarga = cart.reduce((sum, item) => sum + (item.harga * item.qty), 0);
   const sisaBayar = totalHarga - (Number(dp) || 0);
 
   const handleSimpanKasir = async () => {
-    // Validasi ulang status shift saat tombol proses ditekan
     const shiftStatus = localStorage.getItem('herazealikha_shift_status');
     if (shiftStatus !== 'open') {
       toast.error('Kasir sedang ditutup! Harap buka shift terlebih dahulu.');
@@ -107,12 +152,33 @@ export default function KasirPage() {
     if (cart.length === 0) return toast.error('Keranjang kosong!');
     if (!namaPenyewa) return toast.error('Nama pelanggan wajib diisi!');
     if (!tanggalKembali) return toast.error('Tanggal kembali wajib diisi!');
+    if (!jamKembali) return toast.error('Jam kembali wajib diisi!');
 
     setIsSubmitting(true);
     const statusPemb = metodePembayaran === 'Tunai' ? 'diterima' : 'menunggu';
     
+    // Format gabungan tanggal & jam untuk disimpan ke database
+    const waktuBawa = `${tanggalBawa} ${jamBawa}`;
+    const waktuKembali = `${tanggalKembali} ${jamKembali}`;
+    
     try {
       const invoice = `KSR-${Date.now()}`;
+      let buktiUrl = null;
+
+      if (compressedFile) {
+        const fileName = `bukti_${invoice}_${Date.now()}.jpg`;
+        const { error: uploadError } = await supabase.storage
+          .from('bukti-transfer')
+          .upload(fileName, compressedFile, { cacheControl: '3600', upsert: true });
+
+        if (uploadError) throw uploadError;
+
+        const { data: urlData } = supabase.storage
+          .from('bukti-transfer')
+          .getPublicUrl(fileName);
+
+        buktiUrl = urlData.publicUrl;
+      }
       
       const payload = {
         invoice, 
@@ -120,13 +186,14 @@ export default function KasirPage() {
         no_wa: noWa,
         jenis_jaminan: jenisJaminan,
         nomor_jaminan: nomorJaminan,
-        tanggal_bawa: tanggalBawa, 
-        tanggal_kembali: tanggalKembali,
+        tanggal_bawa: waktuBawa, // Disimpan beserta jam
+        tanggal_kembali: waktuKembali, // Disimpan beserta jam
         status: 'dibawa', 
         total_harga: totalHarga, 
         dp: Number(dp) || 0,
         metode_pembayaran: metodePembayaran, 
-        status_pembayaran: statusPemb
+        status_pembayaran: statusPemb,
+        bukti_pembayaran: buktiUrl
       };
 
       const { data: sewaData, error: sewaError } = await supabase
@@ -137,6 +204,7 @@ export default function KasirPage() {
 
       if (sewaError) throw sewaError;
 
+      // Insert ke sewa_items & POTONG STOK DI KATALOG
       for (const item of cart) {
         await supabase.from('sewa_items').insert([{
           sewa_id: sewaData.id, 
@@ -144,6 +212,10 @@ export default function KasirPage() {
           qty: item.qty, 
           harga: item.harga
         }]);
+
+        await supabase.from('katalog_barang').update({
+          stok: item.stok - item.qty
+        }).eq('id', item.id);
       }
 
       toast.success('Transaksi Kasir berhasil disimpan!');
@@ -157,7 +229,6 @@ export default function KasirPage() {
     }
   };
 
-  // Jika shift tertutup, tampilkan halaman blokir kasir
   if (!isShiftOpen) {
     return (
       <div className="flex flex-col items-center justify-center h-[calc(100vh-5rem)] bg-white rounded-2xl border border-purple-200 p-8 text-center max-w-2xl mx-auto my-auto">
@@ -291,14 +362,20 @@ export default function KasirPage() {
             </div>
           </div>
           
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 gap-3 border-t border-purple-100 pt-3">
             <div>
-              <label className="block text-[10px] font-bold text-slate-500 mb-1">Tgl Ambil</label>
-              <input type="date" value={tanggalBawa} onChange={e => setTanggalBawa(e.target.value)} className="w-full bg-white rounded-xl border border-purple-100 px-3 py-1.5 text-xs font-semibold text-slate-700 outline-none" />
+              <label className="block text-[10px] font-bold text-slate-500 mb-1">Tgl & Jam Ambil</label>
+              <div className="flex gap-2">
+                <input type="date" value={tanggalBawa} onChange={e => setTanggalBawa(e.target.value)} className="w-full bg-white rounded-xl border border-purple-100 px-3 py-1.5 text-xs font-semibold text-slate-700 outline-none" />
+                <input type="time" value={jamBawa} onChange={e => setJamBawa(e.target.value)} className="w-24 bg-white rounded-xl border border-purple-100 px-2 py-1.5 text-xs font-semibold text-slate-700 outline-none" />
+              </div>
             </div>
             <div>
-              <label className="block text-[10px] font-bold text-slate-500 mb-1">Tgl Kembali</label>
-              <input type="date" value={tanggalKembali} onChange={e => setTanggalKembali(e.target.value)} className="w-full bg-white rounded-xl border border-purple-100 px-3 py-1.5 text-xs font-semibold text-slate-700 outline-none" />
+              <label className="block text-[10px] font-bold text-slate-500 mb-1">Tgl & Jam Kembali</label>
+              <div className="flex gap-2">
+                <input type="date" value={tanggalKembali} onChange={e => setTanggalKembali(e.target.value)} className="w-full bg-white rounded-xl border border-purple-100 px-3 py-1.5 text-xs font-semibold text-slate-700 outline-none" />
+                <input type="time" value={jamKembali} onChange={e => setJamKembali(e.target.value)} className="w-24 bg-white rounded-xl border border-purple-100 px-2 py-1.5 text-xs font-semibold text-slate-700 outline-none" />
+              </div>
             </div>
           </div>
         </div>
@@ -330,7 +407,7 @@ export default function KasirPage() {
         </div>
 
         {/* Total & Checkout Kasir */}
-        <div className="p-4 bg-white border-t border-purple-100 shrink-0 space-y-2.5">
+        <div className="p-4 bg-white border-t border-purple-100 shrink-0 space-y-2.5 overflow-y-auto max-h-[35vh]">
           
           <div className="flex items-center justify-between">
             <span className="text-slate-600 font-bold text-sm">Total Belanja</span>
@@ -348,10 +425,33 @@ export default function KasirPage() {
                 <option>Tunai</option><option>Transfer</option><option>QRIS</option>
               </select>
             </div>
+
+            {/* Input Upload Bukti: SEKARANG OPSIONAL */}
+            {metodePembayaran !== 'Tunai' && (
+              <div className="col-span-2 pt-2 border-t border-dashed border-purple-100">
+                <div className="flex justify-between items-center mb-1.5">
+                  <label className="block text-[10px] font-bold text-slate-500 flex items-center gap-1">
+                    <Upload size={12} className="text-purple-700" /> Upload Bukti Pembayaran <span className="text-purple-600">(Opsional)</span>
+                  </label>
+                </div>
+                <input 
+                  type="file" 
+                  accept="image/*"
+                  onChange={handleFileChange}
+                  className="w-full text-[10px] text-slate-500 file:mr-2 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-[10px] file:font-bold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100 cursor-pointer border border-purple-200 rounded-xl p-1 bg-slate-50"
+                />
+                <p className="text-[9px] text-slate-400 mt-1 italic">*Bisa disusulkan lewat menu Detail Sewa atau Shift Kasir</p>
+                {previewImage && (
+                  <div className="mt-2 p-1.5 border border-purple-100 rounded-xl bg-slate-50 flex justify-center">
+                    <img src={previewImage} alt="Preview Bukti" className="h-16 object-contain rounded-md" />
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {sisaBayar > 0 && (
-            <div className="flex justify-between text-xs font-bold text-red-500 bg-red-50 p-2 rounded-lg">
+            <div className="flex justify-between text-xs font-bold text-red-500 bg-red-50 p-2 rounded-lg mt-1">
               <span>Kurang Bayar:</span><span>Rp {sisaBayar.toLocaleString('id-ID')}</span>
             </div>
           )}

@@ -35,6 +35,9 @@ export default function ShiftKasPage() {
   // State untuk Tutup Shift
   const [uangFisikAktual, setUangFisikAktual] = useState(0); 
   const [uangSetoran, setUangSetoran] = useState(0);
+  const [closingFile, setClosingFile] = useState<File | null>(null);
+  const [closingPreview, setClosingPreview] = useState<string>('');
+  const [isClosingSubmitting, setIsClosingSubmitting] = useState(false);
   
   const [schedules, setSchedules] = useState<any[]>(DEFAULT_SHIFTS);
   const [activeShiftId, setActiveShiftId] = useState<string>('1');
@@ -125,15 +128,41 @@ export default function ShiftKasPage() {
     setIsModalBukaShiftOpen(false);
   };
 
-  const handleTutupShift = () => {
-    const modalShiftDepan = uangFisikAktual - uangSetoran;
-    
-    setIsShiftOpen(false);
-    localStorage.setItem('herazealikha_shift_status', 'closed');
-    localStorage.setItem('herazealikha_saldo_laci', modalShiftDepan.toString());
-    
-    toast.success('Sesi Kasir berhasil ditutup! Data mutasi shift disimpan.');
-    setIsModalTutupShiftOpen(false);
+  // MENGUNGGAH BUKTI TUTUP SHIFT & MENGAKHIRI SHIFT
+  const handleTutupShift = async () => {
+    if (!closingFile) {
+      return toast.error('Harap unggah bukti tutup shift (foto laci/struk) terlebih dahulu!');
+    }
+
+    setIsClosingSubmitting(true);
+    try {
+      const fileName = `tutup_shift_${Date.now()}.jpg`;
+      const { error: uploadError } = await supabase.storage
+        .from('bukti-transfer') // Simpan di bucket yang sama sementara waktu
+        .upload(fileName, closingFile, { cacheControl: '3600', upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const modalShiftDepan = uangFisikAktual - uangSetoran;
+      
+      setIsShiftOpen(false);
+      localStorage.setItem('herazealikha_shift_status', 'closed');
+      localStorage.setItem('herazealikha_saldo_laci', modalShiftDepan.toString());
+      
+      toast.success('Sesi Kasir berhasil ditutup! Laporan & bukti tersimpan.');
+      setIsModalTutupShiftOpen(false);
+      
+      // Reset form
+      setClosingFile(null);
+      setClosingPreview('');
+      setUangFisikAktual(0);
+      setUangSetoran(0);
+    } catch (error: any) {
+      console.error(error);
+      toast.error('Gagal mengunggah bukti tutup shift.');
+    } finally {
+      setIsClosingSubmitting(false);
+    }
   };
 
   const simpanJadwal = () => {
@@ -142,7 +171,7 @@ export default function ShiftKasPage() {
     setIsModalJadwalOpen(false);
   };
 
-  // FITUR AUTO-COMPRESS GAMBAR SEBELUM UPLOAD
+  // AUTO-COMPRESS GAMBAR UNTUK BUKTI PELANGGAN
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -182,13 +211,52 @@ export default function ShiftKasPage() {
     };
   };
 
-  // LOGIKA UPLOAD KE SUPABASE STORAGE & SIMPAN DATA
+  // AUTO-COMPRESS GAMBAR KHUSUS TUTUP SHIFT
+  const handleClosingFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = document.createElement('img');
+      img.src = event.target?.result as string;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+
+        const MAX_WIDTH = 900;
+        if (width > MAX_WIDTH) {
+          height = Math.round((height * MAX_WIDTH) / width);
+          width = MAX_WIDTH;
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+
+        canvas.toBlob((blob) => {
+          if (!blob) return toast.error('Gagal mengompres gambar.');
+          const compressed = new File([blob], file.name.replace(/\.[^/.]+$/, "") + ".jpg", {
+            type: 'image/jpeg',
+            lastModified: Date.now(),
+          });
+
+          setClosingFile(compressed);
+          setClosingPreview(URL.createObjectURL(compressed));
+        }, 'image/jpeg', 0.7);
+      };
+    };
+  };
+
   const handleVerifikasiBuktiTf = async () => {
     if (!selectedTransaksi) return;
 
     setIsSubmitting(true);
     try {
-      let publicUrl = selectedTransaksi.bukti_transfer;
+      let publicUrl = selectedTransaksi.bukti_pembayaran; 
 
       if (compressedFile) {
         const fileName = `bukti_${selectedTransaksi.invoice}_${Date.now()}.jpg`;
@@ -209,20 +277,20 @@ export default function ShiftKasPage() {
         .from('sewa')
         .update({ 
           status_pembayaran: 'diterima',
-          bukti_transfer: publicUrl
+          bukti_pembayaran: publicUrl
         })
         .eq('id', selectedTransaksi.id);
 
       if (updateError) throw updateError;
       
-      toast.success('Bukti transfer diunggah & pembayaran disetujui!');
+      toast.success('Bukti pembayaran diunggah & diverifikasi!');
       setSelectedTransaksi(null);
       setPreviewImage('');
       setCompressedFile(null);
       fetchShiftData();
     } catch (error: any) {
       console.error(error);
-      toast.error('Gagal mengunggah bukti transfer.');
+      toast.error('Gagal mengunggah bukti pembayaran.');
     } finally {
       setIsSubmitting(false);
     }
@@ -243,10 +311,14 @@ export default function ShiftKasPage() {
   const listNonTunai: any[] = [];
 
   filteredTransaksi.forEach(item => {
-    const metode = item.metode_pembayaran || 'Tunai';
+    let metode = item.metode_pembayaran || 'Tunai';
     const nominal = item.dp || 0; 
     
-    const isNonTunai = metode.toLowerCase() !== 'tunai';
+    if (metode.toLowerCase().includes('transfer')) {
+      metode = 'Transfer';
+    }
+    
+    const isNonTunai = metode.toLowerCase() !== 'tunai' && metode.toLowerCase() !== 'cash';
 
     if (!rincianMetode[metode]) rincianMetode[metode] = 0;
     rincianMetode[metode] += nominal;
@@ -462,7 +534,7 @@ export default function ShiftKasPage() {
                               <button 
                                 onClick={() => {
                                   setSelectedTransaksi(item);
-                                  setPreviewImage(item.bukti_transfer || '');
+                                  setPreviewImage(item.bukti_pembayaran || ''); // Menggunakan bukti_pembayaran
                                   setCompressedFile(null);
                                 }}
                                 className={`font-semibold py-1.5 px-4 rounded-xl text-xs transition-colors shadow-sm inline-flex items-center gap-1.5 ${
@@ -487,7 +559,7 @@ export default function ShiftKasPage() {
       )}
 
       {/* ========================================= */}
-      {/* MODAL UPLOAD FILE BUKTI TRANSFER */}
+      {/* MODAL UPLOAD FILE BUKTI PEMBAYARAN        */}
       {/* ========================================= */}
       {selectedTransaksi && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
@@ -495,7 +567,7 @@ export default function ShiftKasPage() {
             
             <div className="p-5 border-b border-purple-100 bg-purple-50 flex justify-between items-center">
               <h3 className="font-bold text-slate-800 text-base flex items-center gap-2">
-                <ShieldCheck size={18} className="text-purple-700" /> Upload Bukti Transfer (Auto-Compress)
+                <ShieldCheck size={18} className="text-purple-700" /> Upload Bukti Pembayaran
               </h3>
               <button onClick={() => setSelectedTransaksi(null)} className="text-slate-400 hover:text-slate-600 text-sm font-bold">✕</button>
             </div>
@@ -523,7 +595,7 @@ export default function ShiftKasPage() {
               {previewImage && (
                 <div className="border border-purple-200 rounded-xl p-2 bg-slate-50 flex flex-col items-center">
                   <span className="text-[10px] font-bold text-slate-400 mb-1 uppercase">Preview Gambar</span>
-                  <img src={previewImage} alt="Preview Bukti TF" className="h-40 object-contain rounded-lg" />
+                  <img src={previewImage} alt="Preview Bukti Pembayaran" className="h-40 object-contain rounded-lg" />
                 </div>
               )}
             </div>
@@ -571,7 +643,7 @@ export default function ShiftKasPage() {
         </div>
       )}
 
-      {/* MODAL TUTUP SHIFT */}
+      {/* MODAL TUTUP SHIFT DENGAN FITUR UPLOAD WAJIB */}
       {isModalTutupShiftOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
           <div className="bg-white w-full max-w-md rounded-2xl shadow-xl overflow-hidden flex flex-col max-h-[95vh]">
@@ -616,10 +688,38 @@ export default function ShiftKasPage() {
                     Rp {(uangFisikAktual - uangSetoran).toLocaleString('id-ID')}
                   </div>
                 </div>
+
+                {/* AREA UPLOAD WAJIB TUTUP SHIFT */}
+                <div className="pt-3 border-t border-purple-200">
+                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1.5 flex items-center gap-1.5">
+                    <Upload size={14} className="text-purple-700" /> 4. Upload Bukti Tutup Shift (Wajib)
+                  </label>
+                  <input 
+                    type="file" 
+                    accept="image/*"
+                    onChange={handleClosingFileChange}
+                    className="w-full text-[10px] text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-[10px] file:font-bold file:bg-purple-100 file:text-purple-700 hover:file:bg-purple-200 cursor-pointer border border-purple-200 rounded-xl p-1 bg-white"
+                  />
+                  <p className="text-[10px] text-red-500 mt-1 font-semibold italic">*Wajib foto fisik laci uang/struk untuk disetor.</p>
+                  
+                  {closingPreview && (
+                    <div className="mt-2 p-1.5 border border-purple-200 rounded-xl bg-white flex justify-center">
+                      <img src={closingPreview} alt="Preview Bukti Tutup" className="h-24 object-contain rounded-lg" />
+                    </div>
+                  )}
+                </div>
+
               </div>
             </div>
             <div className="p-4 border-t border-purple-100 bg-slate-50 flex gap-3 shrink-0">
-              <button onClick={handleTutupShift} className="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-3 rounded-xl text-sm transition-colors">Akhiri & Mutasi</button>
+              <button 
+                onClick={handleTutupShift} 
+                disabled={isClosingSubmitting}
+                className="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-3 rounded-xl text-sm transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {isClosingSubmitting ? <Loader2 size={18} className="animate-spin" /> : null}
+                {isClosingSubmitting ? 'Mengunggah Data...' : 'Akhiri & Mutasi'}
+              </button>
             </div>
           </div>
         </div>

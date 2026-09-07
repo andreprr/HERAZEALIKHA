@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase';
 import toast from 'react-hot-toast';
 import { 
   Search, Plus, Edit, Trash2, Box, Image as ImageIcon, 
-  Tag, Loader2, Filter
+  Tag, Loader2, Filter, PackageCheck, Ruler, Hash
 } from 'lucide-react';
 
 export default function KatalogBarangPage() {
@@ -26,6 +26,8 @@ export default function KatalogBarangPage() {
   const fetchBarang = async () => {
     setIsLoading(true);
     try {
+      // Pastikan tabel katalog_barang Anda sudah memiliki kolom: 
+      // sku, varian, harga, stok, kelengkapan, dan gambar_url
       const { data, error } = await supabase
         .from('katalog_barang')
         .select('*')
@@ -59,9 +61,13 @@ export default function KatalogBarangPage() {
     }
   };
 
-  // Logika Pencarian & Filter
+  // Logika Pencarian & Filter (Bisa mencari berdasarkan Nama atau SKU)
   const filteredData = barangList.filter(item => {
-    const matchSearch = item.nama_barang.toLowerCase().includes(searchQuery.toLowerCase());
+    const searchLower = searchQuery.toLowerCase();
+    const matchSearch = 
+      item.nama_barang?.toLowerCase().includes(searchLower) || 
+      item.sku?.toLowerCase().includes(searchLower);
+    
     const matchKategori = filterKategori === '' || item.kategori === filterKategori;
     return matchSearch && matchKategori;
   });
@@ -84,7 +90,7 @@ export default function KatalogBarangPage() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
             <input 
               type="text" 
-              placeholder="Cari nama barang..." 
+              placeholder="Cari nama atau SKU..." 
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full h-10 pl-9 pr-4 text-sm rounded-xl bg-purple-50/50 border border-purple-200 outline-none focus:border-purple-600 focus:ring-1 focus:ring-purple-600 transition-all text-slate-800"
@@ -127,12 +133,12 @@ export default function KatalogBarangPage() {
           <p className="text-slate-500 text-sm mt-1">Coba sesuaikan kata kunci pencarian atau kategori Anda.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5">
           {filteredData.map((item) => (
             <div key={item.id} className="bg-white rounded-2xl shadow-sm border border-purple-200 overflow-hidden flex flex-col group hover:shadow-md transition-shadow">
               
-              {/* Gambar Barang */}
-              <div className="relative w-full aspect-[4/5] bg-purple-50/50 border-b border-purple-100 flex items-center justify-center overflow-hidden">
+              {/* Gambar Barang (Tinggi Diatur Proporsional & Tidak Terlalu Besar) */}
+              <div className="relative w-full h-40 bg-purple-50/50 border-b border-purple-100 flex items-center justify-center overflow-hidden shrink-0">
                 {item.gambar_url ? (
                   <img 
                     src={item.gambar_url} 
@@ -141,27 +147,45 @@ export default function KatalogBarangPage() {
                   />
                 ) : (
                   <div className="flex flex-col items-center text-purple-300">
-                    <ImageIcon size={40} className="mb-2" />
-                    <span className="text-xs font-semibold">Tanpa Foto</span>
+                    <ImageIcon size={32} className="mb-2" />
+                    <span className="text-[10px] font-semibold">Tanpa Foto</span>
                   </div>
                 )}
                 
                 {/* Badge Kategori */}
-                <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-sm px-2.5 py-1 rounded-lg shadow-sm border border-purple-100 flex items-center gap-1">
-                  <Tag size={12} className="text-purple-700" />
-                  <span className="text-[10px] font-bold text-slate-700 uppercase tracking-wider">{item.kategori}</span>
+                <div className="absolute top-2 right-2 bg-white/90 backdrop-blur-sm px-2 py-0.5 rounded-md shadow-sm border border-purple-100 flex items-center gap-1">
+                  <Tag size={10} className="text-purple-700" />
+                  <span className="text-[9px] font-bold text-slate-700 uppercase tracking-wider">{item.kategori}</span>
                 </div>
               </div>
 
               {/* Detail Barang */}
-              <div className="p-4 flex flex-col flex-1">
-                <h3 className="font-bold text-slate-800 text-sm line-clamp-2 leading-tight mb-2">
+              <div className="p-3.5 flex flex-col flex-1">
+                <h3 className="font-bold text-slate-800 text-sm line-clamp-2 leading-tight mb-2" title={item.nama_barang}>
                   {item.nama_barang}
                 </h3>
                 
+                {/* Rincian Spesifikasi (SKU, Varian, Kelengkapan) */}
+                <div className="space-y-1.5 mb-3">
+                  <div className="flex items-center gap-1.5 text-[10px] text-slate-600 font-medium">
+                    <Hash size={12} className="text-slate-400" />
+                    <span className="truncate">SKU: <span className="font-bold text-slate-700">{item.sku || '-'}</span></span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-[10px] text-slate-600 font-medium">
+                    <Ruler size={12} className="text-slate-400" />
+                    <span className="truncate">Varian/Ukuran: <span className="font-bold text-slate-700">{item.varian || '-'}</span></span>
+                  </div>
+                  <div className="flex items-start gap-1.5 text-[10px] text-slate-600 font-medium">
+                    <PackageCheck size={12} className="text-slate-400 shrink-0 mt-0.5" />
+                    <span className="line-clamp-2 leading-tight" title={item.kelengkapan}>
+                      Kelengkapan: <span className="font-semibold text-slate-700">{item.kelengkapan || '-'}</span>
+                    </span>
+                  </div>
+                </div>
+                
                 {/* STOK BARANG */}
                 <div className="flex items-center gap-2 mb-3">
-                  <span className={`inline-flex items-center gap-1.5 px-2 py-1 text-[11px] font-bold rounded-md ${
+                  <span className={`inline-flex items-center gap-1.5 px-2 py-1 text-[10px] font-bold rounded-md ${
                     item.stok > 0 
                       ? 'bg-green-100 text-green-700' 
                       : 'bg-red-100 text-red-700'
@@ -171,26 +195,27 @@ export default function KatalogBarangPage() {
                   </span>
                 </div>
 
+                {/* HARGA SEWA */}
                 <div className="mt-auto">
-                  <p className="text-[10px] text-slate-500 mb-0.5">Harga Sewa</p>
-                  <p className="font-black text-purple-700 text-lg leading-none mb-4">
-                    Rp {item.harga.toLocaleString('id-ID')}
+                  <p className="text-[10px] font-bold text-slate-500 mb-0.5">Harga Sewa</p>
+                  <p className="font-black text-purple-700 text-base leading-none mb-3">
+                    Rp {(item.harga || 0).toLocaleString('id-ID')}
                   </p>
                 </div>
 
                 {/* Tombol Aksi */}
-                <div className="grid grid-cols-2 gap-2 pt-3 border-t border-purple-100 mt-auto">
+                <div className="grid grid-cols-2 gap-2 pt-2.5 border-t border-purple-100 mt-auto">
                   <Link 
                     href={`/katalog-barang/edit/${item.id}`} 
-                    className="flex items-center justify-center gap-1.5 p-2 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-xl text-xs font-semibold transition-colors"
+                    className="flex items-center justify-center gap-1.5 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-lg text-[11px] font-bold transition-colors"
                   >
-                    <Edit size={14} /> Edit
+                    <Edit size={12} /> Edit
                   </Link>
                   <button 
                     onClick={() => handleDelete(item.id, item.nama_barang)}
-                    className="flex items-center justify-center gap-1.5 p-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl text-xs font-semibold transition-colors"
+                    className="flex items-center justify-center gap-1.5 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg text-[11px] font-bold transition-colors"
                   >
-                    <Trash2 size={14} /> Hapus
+                    <Trash2 size={12} /> Hapus
                   </button>
                 </div>
               </div>

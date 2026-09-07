@@ -6,7 +6,7 @@ import { useRouter, useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import toast from 'react-hot-toast';
 import { 
-  Save, X, Upload, Tag, Box, DollarSign, Type, Loader2, List, Plus, Check 
+  Save, X, Upload, Tag, Box, DollarSign, Type, Loader2, List, Plus, Check, Hash, Ruler 
 } from 'lucide-react';
 
 export default function EditBarangPage() {
@@ -16,6 +16,8 @@ export default function EditBarangPage() {
 
   const [namaBarang, setNamaBarang] = useState('');
   const [kategori, setKategori] = useState('');
+  const [sku, setSku] = useState('');
+  const [varian, setVarian] = useState('');
   const [harga, setHarga] = useState('');
   const [stok, setStok] = useState('');
   const [kelengkapan, setKelengkapan] = useState(''); 
@@ -55,6 +57,8 @@ export default function EditBarangPage() {
         if (data) {
           setNamaBarang(data.nama_barang);
           setKategori(data.kategori);
+          setSku(data.sku || '');
+          setVarian(data.varian || '');
           setHarga(data.harga.toString());
           setStok(data.stok.toString());
           setKelengkapan(data.kelengkapan || ''); 
@@ -136,6 +140,8 @@ export default function EditBarangPage() {
         .update({
           nama_barang: namaBarang,
           kategori: kategori,
+          sku: sku || null,
+          varian: varian || null,
           harga: Number(harga),
           stok: Number(stok),
           kelengkapan: kelengkapan, 
@@ -158,7 +164,7 @@ export default function EditBarangPage() {
 
   if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center h-full bg-white">
+      <div className="flex flex-col items-center justify-center h-[calc(100vh-5rem)] bg-white">
         <Loader2 size={40} className="text-purple-700 animate-spin mb-4" />
         <p className="text-slate-500 font-medium">Memuat data barang...</p>
       </div>
@@ -195,6 +201,7 @@ export default function EditBarangPage() {
                     <Upload size={20} className="text-purple-700" />
                   </div>
                   <span className="text-sm font-semibold text-slate-700">Ganti Foto</span>
+                  <span className="text-xs text-slate-500 mt-1">PNG, JPG up to 5MB</span>
                 </div>
               )}
               <input 
@@ -204,6 +211,18 @@ export default function EditBarangPage() {
                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
               />
             </div>
+            {previewImage && existingImageUrl !== previewImage && (
+              <button 
+                type="button" 
+                onClick={() => { 
+                  setPreviewImage(existingImageUrl); 
+                  setImageFile(null); 
+                }}
+                className="text-xs text-amber-500 hover:text-amber-600 font-semibold mt-1"
+              >
+                Batal Ganti Foto
+              </button>
+            )}
           </div>
 
           {/* DETAIL BARANG */}
@@ -256,6 +275,28 @@ export default function EditBarangPage() {
                 )}
               </div>
 
+              {/* SKU */}
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">Kode / SKU (Opsional)</label>
+                <div className="relative">
+                  <Hash className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                  <input type="text" value={sku} onChange={(e) => setSku(e.target.value)} placeholder="Contoh: GN-001" className="w-full pl-11 pr-4 py-3 text-sm rounded-xl bg-purple-50/50 border border-purple-200 focus:border-purple-600 text-slate-800 outline-none" />
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              
+              {/* Varian / Ukuran */}
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">Varian / Ukuran (Opsional)</label>
+                <div className="relative">
+                  <Ruler className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                  <input type="text" value={varian} onChange={(e) => setVarian(e.target.value)} placeholder="Contoh: L, All Size, Mocca" className="w-full pl-11 pr-4 py-3 text-sm rounded-xl bg-purple-50/50 border border-purple-200 focus:border-purple-600 text-slate-800 outline-none" />
+                </div>
+              </div>
+
+              {/* Stok */}
               <div>
                 <label className="block text-sm font-bold text-slate-700 mb-2">Stok Tersedia</label>
                 <div className="relative">

@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import toast from 'react-hot-toast';
 import { 
-  Save, X, Upload, Tag, Box, DollarSign, Type, List, Plus, Check 
+  Save, X, Upload, Tag, Box, DollarSign, Type, List, Plus, Check, Hash, Ruler 
 } from 'lucide-react';
 
 export default function TambahBarangPage() {
@@ -14,6 +14,11 @@ export default function TambahBarangPage() {
   
   const [namaBarang, setNamaBarang] = useState('');
   const [kategori, setKategori] = useState('');
+  
+  // Field Baru
+  const [sku, setSku] = useState('');
+  const [varian, setVarian] = useState('');
+  
   const [harga, setHarga] = useState('');
   const [stok, setStok] = useState('');
   const [kelengkapan, setKelengkapan] = useState('');
@@ -100,6 +105,8 @@ export default function TambahBarangPage() {
           {
             nama_barang: namaBarang,
             kategori: kategori,
+            sku: sku || null, // Field baru
+            varian: varian || null, // Field baru
             harga: Number(harga),
             stok: Number(stok),
             kelengkapan: kelengkapan, 
@@ -220,6 +227,28 @@ export default function TambahBarangPage() {
                 )}
               </div>
 
+              {/* SKU */}
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">Kode / SKU (Opsional)</label>
+                <div className="relative">
+                  <Hash className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                  <input type="text" value={sku} onChange={(e) => setSku(e.target.value)} placeholder="Contoh: GN-001" className="w-full pl-11 pr-4 py-3 text-sm rounded-xl bg-purple-50/50 border border-purple-200 focus:border-purple-600 text-slate-800 outline-none" />
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              
+              {/* Varian / Ukuran */}
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">Varian / Ukuran (Opsional)</label>
+                <div className="relative">
+                  <Ruler className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                  <input type="text" value={varian} onChange={(e) => setVarian(e.target.value)} placeholder="Contoh: L, All Size, Mocca" className="w-full pl-11 pr-4 py-3 text-sm rounded-xl bg-purple-50/50 border border-purple-200 focus:border-purple-600 text-slate-800 outline-none" />
+                </div>
+              </div>
+
+              {/* Stok */}
               <div>
                 <label className="block text-sm font-bold text-slate-700 mb-2">Stok Tersedia</label>
                 <div className="relative">

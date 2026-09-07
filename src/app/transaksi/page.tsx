@@ -109,11 +109,11 @@ export default function TransaksiPage() {
   const totalPemasukan = filteredData.reduce((sum, item) => sum + (item.dp || 0) + (item.status === 'selesai' ? (item.total_harga - item.dp) : 0), 0);
   const totalPotensi = filteredData.reduce((sum, item) => sum + (item.total_harga || 0), 0);
 
-  // EXPORT EXCEL BESERTA BUKTI TF
+  // EXPORT EXCEL BESERTA BUKTI PEMBAYARAN
   const handleExportCSV = () => {
     if (filteredData.length === 0) return toast.error('Tidak ada data untuk diekspor');
 
-    const headers = ['Waktu', 'Invoice', 'Nama Pelanggan', 'Status Sewa', 'Total Harga', 'Terbayar', 'Sisa', 'Status Pembayaran', 'Metode', 'Bukti TF (URL)'];
+    const headers = ['Waktu', 'Invoice', 'Nama Pelanggan', 'Status Sewa', 'Total Harga', 'Terbayar', 'Sisa', 'Status Pembayaran', 'Metode', 'Bukti Pembayaran (URL)'];
     
     const csvRows = filteredData.map(item => {
       const sisa = item.total_harga - (item.dp || 0);
@@ -127,7 +127,7 @@ export default function TransaksiPage() {
         sisa,
         `"${item.status_pembayaran}"`,
         `"${item.metode_pembayaran || 'Tunai'}"`,
-        `"${item.bukti_transfer || '-'}"`
+        `"${item.bukti_pembayaran || '-'}"` // PERBAIKAN DI SINI
       ].join(',');
     });
 
@@ -145,7 +145,7 @@ export default function TransaksiPage() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    toast.success('Data Excel (CSV) beserta Bukti TF berhasil diunduh!');
+    toast.success('Data Excel (CSV) beserta Bukti Pembayaran berhasil diunduh!');
   };
 
   const getStatusBadge = (status: string) => {
@@ -272,7 +272,7 @@ export default function TransaksiPage() {
                   <th className="px-6 py-4 w-[22%]">Pelanggan</th>
                   <th className="px-6 py-4 whitespace-nowrap w-[18%] text-right">Nilai Transaksi</th>
                   <th className="px-6 py-4 whitespace-nowrap w-[18%]">Pembayaran</th>
-                  <th className="px-6 py-4 whitespace-nowrap w-[14%] text-center print-hidden">Bukti TF</th>
+                  <th className="px-6 py-4 whitespace-nowrap w-[14%] text-center print-hidden">Bukti Pembayaran</th>
                   <th className="px-6 py-4 text-center whitespace-nowrap w-[10%] print-hidden">Aksi</th>
                 </tr>
               </thead>
@@ -325,11 +325,12 @@ export default function TransaksiPage() {
                           </div>
                         </td>
 
-                        {/* KOLOM BUKTI TRANSFER (VIEW FOTO) */}
+                        {/* KOLOM BUKTI PEMBAYARAN (VIEW FOTO) */}
                         <td className="px-6 py-4 text-center whitespace-nowrap print-hidden">
-                          {item.bukti_transfer ? (
+                          {/* PERBAIKAN DI SINI: menggunakan item.bukti_pembayaran */}
+                          {item.bukti_pembayaran ? (
                             <a 
-                              href={item.bukti_transfer} 
+                              href={item.bukti_pembayaran} 
                               target="_blank" 
                               rel="noopener noreferrer"
                               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-50 text-purple-700 hover:bg-purple-100 font-bold text-xs transition-colors"

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { 
   LayoutDashboard, ReceiptText, CalendarDays, ArrowRightLeft,  
-  Users, Box, Library, Download, Upload, FileText, Settings,
+  Users, WashingMachine, Library, Download, Upload, FileText, Settings,
   Menu, X, ChevronLeft, ChevronRight, UserCircle, Banknote
 } from 'lucide-react';
 
@@ -16,7 +16,7 @@ const menuItems = [
   { path: '/transaksi', label: 'Transaksi', icon: ArrowRightLeft },
   { path: '/shift-kas', label: 'Shift Kas', icon: Banknote },
   { path: '/pelanggan', label: 'Pelanggan', icon: Users },
-  { path: '/inventaris', label: 'Inventaris', icon: Box },
+  { path: '/perawatan', label: 'Perawatan', icon: WashingMachine },
   { path: '/katalog-barang', label: 'Katalog Barang', icon: Library },
   { path: '/penerimaan', label: 'Penerimaan', icon: Download },
   { path: '/pengeluaran', label: 'Pengeluaran', icon: Upload },
@@ -40,14 +40,14 @@ export default function Sidebar({ children }: { children: React.ReactNode }) {
       {/* OVERLAY MOBILE */}
       {isMobileMenuOpen && (
         <div 
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden backdrop-blur-sm"
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden backdrop-blur-sm print:hidden"
           onClick={() => setIsMobileMenuOpen(false)}
         />
       )}
 
-      {/* SIDEBAR */}
+      {/* SIDEBAR (Ditambahkan print:hidden agar tidak ikut tercetak di PDF) */}
       <aside 
-        className={`fixed lg:static top-0 left-0 h-full z-50 flex flex-col bg-white border-r border-purple-100 shadow-sm lg:shadow-none transition-all duration-300 ease-in-out
+        className={`fixed lg:static top-0 left-0 h-full z-50 flex flex-col bg-white border-r border-purple-100 shadow-sm lg:shadow-none transition-all duration-300 ease-in-out print:hidden
           ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
           ${isSidebarOpen ? 'w-64' : 'w-[80px]'}
         `}
@@ -114,7 +114,8 @@ export default function Sidebar({ children }: { children: React.ReactNode }) {
       {/* AREA KONTEN UTAMA */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-white">
         
-        <header className="h-20 flex items-center justify-between px-4 sm:px-8 shrink-0 bg-white border-b border-purple-100">
+        {/* HEADER (Ditambahkan print:hidden agar tidak ikut tercetak di PDF) */}
+        <header className="h-20 flex items-center justify-between px-4 sm:px-8 shrink-0 bg-white border-b border-purple-100 print:hidden">
           <div className="flex items-center gap-4">
             <button 
               className="lg:hidden p-2 rounded-lg shadow-sm bg-white border border-purple-200 text-slate-500 hover:text-purple-700"
