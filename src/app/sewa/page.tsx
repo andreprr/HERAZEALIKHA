@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase';
 import toast from 'react-hot-toast';
 import { 
   Search, Plus, CalendarDays, Loader2, 
-  Clock, Package, CheckCircle, AlertCircle, Eye, CheckSquare, Edit3
+  Clock, Package, CheckCircle, Eye, CheckSquare, Edit3
 } from 'lucide-react';
 
 export default function SewaPage() {
@@ -52,10 +52,47 @@ export default function SewaPage() {
     }
   };
 
+  // 🔴 PENGECEKAN TERLAMBAT BERBASIS WAKTU LOKAL (ANTI GESER TIMEZONE)
   const isTerlambat = (tanggalKembali: string, status: string) => {
-    if (status === 'selesai') return false;
-    const today = new Date().toISOString().split('T')[0];
-    return tanggalKembali < today;
+    if (status === 'selesai' || !tanggalKembali) return false;
+    
+    try {
+      // Normalisasi format dari DB (Misal: "2026-09-07 23:05:00" -> "2026-09-07 23:05")
+      let cleanStr = tanggalKembali.trim().replace('T', ' ');
+      if (cleanStr.length === 10) cleanStr += ' 23:59';
+      if (cleanStr.length > 16) cleanStr = cleanStr.substring(0, 16);
+
+      // Ambil waktu saat ini dalam format lokal (YYYY-MM-DD HH:mm)
+      const now = new Date();
+      const yr = now.getFullYear();
+      const mth = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      const hr = String(now.getHours()).padStart(2, '0');
+      const min = String(now.getMinutes()).padStart(2, '0');
+      const currentLocalStr = `${yr}-${mth}-${day} ${hr}:${min}`;
+
+      return currentLocalStr > cleanStr;
+    } catch (err) {
+      return false;
+    }
+  };
+
+  // 🔴 FORMATTER TAMPILAN TANPA KONVERSI UTC
+  const formatDate = (dateString: string) => {
+    if (!dateString) return '-';
+    let cleanStr = dateString.trim().replace('T', ' ');
+    if (cleanStr.length > 16) cleanStr = cleanStr.substring(0, 16);
+    
+    if (cleanStr.length === 10) {
+      const [y, m, d] = cleanStr.split('-');
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+      return `${parseInt(d)} ${months[parseInt(m)-1]} ${y}`;
+    }
+
+    const [datePart, timePart] = cleanStr.split(' ');
+    const [y, m, d] = datePart.split('-');
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+    return `${parseInt(d)} ${months[parseInt(m)-1]} ${y}, ${timePart} WIB`;
   };
 
   const getKategoriStatus = (item: any) => {
@@ -68,15 +105,15 @@ export default function SewaPage() {
 
   const filteredData = sewaList.filter(item => {
     const matchSearch = 
-      item.nama_penyewa.toLowerCase().includes(searchQuery.toLowerCase()) || 
-      item.invoice.toLowerCase().includes(searchQuery.toLowerCase());
+      item.nama_penyewa?.toLowerCase().includes(searchQuery.toLowerCase()) || 
+      item.invoice?.toLowerCase().includes(searchQuery.toLowerCase());
     
     const kategori = getKategoriStatus(item);
     let matchTab = false;
     
     if (activeTab === 'Semua') matchTab = true;
     else if (activeTab === 'Perlu tindakan') {
-      matchTab = kategori === 'Terlambat' || (item.total_harga - (item.dp || 0)) > 0;
+      matchTab = kategori === 'Terlambat' || ((item.total_harga || 0) - (item.dp || 0)) > 0;
     } else {
       matchTab = kategori === activeTab;
     }
@@ -86,12 +123,6 @@ export default function SewaPage() {
 
   const totalKontrak = sewaList.length;
   const totalTerlambat = sewaList.filter(item => isTerlambat(item.tanggal_kembali, item.status)).length;
-
-  const formatDate = (dateString: string) => {
-    if (!dateString) return '-';
-    const options: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short', year: 'numeric' };
-    return new Date(dateString).toLocaleDateString('id-ID', options);
-  };
 
   return (
     <div className="flex flex-col gap-6 h-full pb-12 pt-2 w-full max-w-full bg-white">
@@ -217,7 +248,6 @@ export default function SewaPage() {
                       </button>
                     )}
                     
-                    {/* TOMBOL EDIT */}
                     <Link href={`/sewa/edit/${item.id}`} className="text-xs font-bold bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 px-3 py-2 rounded-xl transition-colors flex items-center gap-1.5" title="Edit Transaksi">
                       <Edit3 size={14} /> Edit
                     </Link>
@@ -240,23 +270,15 @@ export default function SewaPage() {
                   </div>
 
                   <div className="flex flex-col gap-1">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Kembali</span>
-                    <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700">
-                      <CalendarDays size={14} className="text-purple-600" />
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Batas Kembali</span>
+                    <div className={`flex items-center gap-1.5 text-xs font-bold ${kategori === 'Terlambat' ? 'text-red-500' : 'text-slate-700'}`}>
+                      <Clock size={14} className={kategori === 'Terlambat' ? 'text-red-500' : 'text-purple-600'} />
                       {formatDate(item.tanggal_kembali)}
                     </div>
                   </div>
 
-                  <div className="flex flex-col gap-1">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Batas Waktu</span>
-                    <div className={`flex items-center gap-1.5 text-xs font-bold ${kategori === 'Terlambat' ? 'text-red-500' : 'text-slate-700'}`}>
-                      <Clock size={14} className={kategori === 'Terlambat' ? 'text-red-500' : 'text-purple-600'} />
-                      {formatDate(item.tanggal_kembali)} {item.jam_kembali || ''}
-                    </div>
-                  </div>
-
-                  {/* INFORMASI PEMBAYARAN (LUNAS / DP) */}
-                  <div className="flex flex-col gap-1">
+                  {/* INFORMASI PEMBAYARAN */}
+                  <div className="flex flex-col gap-1 col-span-2 sm:col-span-2">
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Nilai & Pembayaran</span>
                       <span className={`text-[10px] px-2 py-0.5 rounded font-black uppercase ${isLunas ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>

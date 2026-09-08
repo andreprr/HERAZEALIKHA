@@ -30,9 +30,25 @@ export default function KasirPage() {
   const [jenisJaminan, setJenisJaminan] = useState('KTP');
   const [nomorJaminan, setNomorJaminan] = useState('');
 
+  // 🔴 PENENTUAN TANGGAL & JAM DEFAULT BERBASIS WAKTU LOKAL (ANTI MUNDUR HARI)
+  const getLocalDate = () => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  };
+
+  const getLocalTime = () => {
+    const now = new Date();
+    const h = String(now.getHours()).padStart(2, '0');
+    const m = String(now.getMinutes()).padStart(2, '0');
+    return `${h}:${m}`;
+  };
+
   // STATE TANGGAL & JAM
-  const [tanggalBawa, setTanggalBawa] = useState(new Date().toISOString().split('T')[0]);
-  const [jamBawa, setJamBawa] = useState(new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }));
+  const [tanggalBawa, setTanggalBawa] = useState(getLocalDate());
+  const [jamBawa, setJamBawa] = useState(getLocalTime());
   const [tanggalKembali, setTanggalKembali] = useState('');
   const [jamKembali, setJamKembali] = useState('17:00'); // Default jam kembali (sore)
 
@@ -151,13 +167,13 @@ export default function KasirPage() {
 
     if (cart.length === 0) return toast.error('Keranjang kosong!');
     if (!namaPenyewa) return toast.error('Nama pelanggan wajib diisi!');
-    if (!tanggalKembali) return toast.error('Tanggal kembali wajib diisi!');
-    if (!jamKembali) return toast.error('Jam kembali wajib diisi!');
+    if (!tanggalBawa || !jamBawa) return toast.error('Tanggal & Jam Bawa wajib diisi!');
+    if (!tanggalKembali || !jamKembali) return toast.error('Tanggal & Jam Kembali wajib diisi!');
 
     setIsSubmitting(true);
     const statusPemb = metodePembayaran === 'Tunai' ? 'diterima' : 'menunggu';
     
-    // Format gabungan tanggal & jam untuk disimpan ke database
+    // 🔴 GABUNGKAN TANGGAL & JAM UNTUK DISIMPAN SEBAGAI TEKS (YYYY-MM-DD HH:mm)
     const waktuBawa = `${tanggalBawa} ${jamBawa}`;
     const waktuKembali = `${tanggalKembali} ${jamKembali}`;
     
@@ -185,9 +201,10 @@ export default function KasirPage() {
         nama_penyewa: namaPenyewa, 
         no_wa: noWa,
         jenis_jaminan: jenisJaminan,
-        nomor_jaminan: nomorJaminan,
-        tanggal_bawa: waktuBawa, // Disimpan beserta jam
-        tanggal_kembali: waktuKembali, // Disimpan beserta jam
+        nomor_jaminan: nomorJaminan, // Disesuaikan dengan penamaan DB di sewa
+        tanggal_bawa: waktuBawa, // Disimpan sebagai teks YYYY-MM-DD HH:mm
+        tanggal_kembali: waktuKembali, // Disimpan sebagai teks YYYY-MM-DD HH:mm
+        jam_kembali: jamKembali, // Disimpan juga secara independen jika diperlukan
         status: 'dibawa', 
         total_harga: totalHarga, 
         dp: Number(dp) || 0,

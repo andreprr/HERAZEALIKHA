@@ -6,8 +6,8 @@ import { supabase } from '@/lib/supabase';
 import toast from 'react-hot-toast';
 import { 
   ArrowLeft, MessageCircle, FileText, User, 
-  Calendar, ShoppingBag, CreditCard, Loader2, ShieldCheck, Phone, Printer, CheckCircle,
-  PackageOpen, WashingMachine, ShieldAlert, Settings2, Upload
+  Calendar, ShoppingBag, CreditCard, Loader2, Printer, CheckCircle,
+  PackageOpen, Upload
 } from 'lucide-react';
 
 export default function DetailSewaPage() {
@@ -23,6 +23,7 @@ export default function DetailSewaPage() {
   const [returnItems, setReturnItems] = useState<any[]>([]);
   const [isReturning, setIsReturning] = useState(false);
   const [isUploadingBukti, setIsUploadingBukti] = useState(false);
+  const [hasUploadedPelunasan, setHasUploadedPelunasan] = useState(false);
 
   useEffect(() => {
     if (id) fetchDetail();
@@ -58,7 +59,44 @@ export default function DetailSewaPage() {
     }
   };
 
-  // Fungsi Upload Bukti Pembayaran
+  // 🔴 PENGECEKAN TERLAMBAT BERBASIS WAKTU LOKAL
+  const isTerlambat = (tanggalKembali: string, status: string) => {
+    if (status === 'selesai' || !tanggalKembali) return false;
+    try {
+      let cleanStr = tanggalKembali.trim().replace('T', ' ');
+      if (cleanStr.length === 10) cleanStr += ' 23:59';
+      if (cleanStr.length > 16) cleanStr = cleanStr.substring(0, 16);
+
+      const now = new Date();
+      const yr = now.getFullYear();
+      const mth = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      const hr = String(now.getHours()).padStart(2, '0');
+      const min = String(now.getMinutes()).padStart(2, '0');
+      const currentLocalStr = `${yr}-${mth}-${day} ${hr}:${min}`;
+
+      return currentLocalStr > cleanStr;
+    } catch (err) { return false; }
+  };
+
+  // 🔴 FORMATTER TAMPILAN TANPA KONVERSI UTC
+  const formatDateTime = (dateString: string) => {
+    if (!dateString) return '-';
+    let cleanStr = dateString.trim().replace('T', ' ');
+    if (cleanStr.length > 16) cleanStr = cleanStr.substring(0, 16);
+    
+    if (cleanStr.length === 10) {
+      const [y, m, d] = cleanStr.split('-');
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+      return `${parseInt(d)} ${months[parseInt(m)-1]} ${y}`;
+    }
+
+    const [datePart, timePart] = cleanStr.split(' ');
+    const [y, m, d] = datePart.split('-');
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+    return `${parseInt(d)} ${months[parseInt(m)-1]} ${y}, ${timePart} WIB`;
+  };
+
   const handleUploadBukti = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -68,7 +106,6 @@ export default function DetailSewaPage() {
       const fileExt = file.name.split('.').pop();
       const fileName = `bukti-${id}-${Date.now()}.${fileExt}`;
 
-      // Upload ke bucket "bukti-transfer"
       const { error: uploadError } = await supabase.storage
         .from('bukti-transfer')
         .upload(fileName, file);
@@ -80,17 +117,21 @@ export default function DetailSewaPage() {
         .getPublicUrl(fileName);
 
       const buktiUrl = publicUrlData.publicUrl;
+      let finalUrl = buktiUrl;
+      if (sewa.bukti_pembayaran) {
+        finalUrl = `${sewa.bukti_pembayaran},${buktiUrl}`;
+      }
 
-      // Update tabel sewa
       const { error: updateError } = await supabase
         .from('sewa')
-        .update({ bukti_pembayaran: buktiUrl })
+        .update({ bukti_pembayaran: finalUrl })
         .eq('id', id);
 
       if (updateError) throw updateError;
 
-      toast.success('Bukti pembayaran berhasil diunggah!');
-      fetchDetail(); // Refresh data
+      toast.success('Bukti pembayaran baru berhasil ditambahkan!');
+      setHasUploadedPelunasan(true); 
+      fetchDetail(); 
     } catch (error: any) {
       toast.error('Gagal mengunggah bukti: ' + error.message);
     } finally {
@@ -98,7 +139,6 @@ export default function DetailSewaPage() {
     }
   };
 
-  // Membuka Modal Pengembalian (Dengan VALIDASI Bukti Pembayaran)
   const handleOpenReturnModal = () => {
     const method = (sewa.metode_pembayaran || '').toLowerCase();
     const isCash = method.includes('cash') || method.includes('tunai');
@@ -109,8 +149,7 @@ export default function DetailSewaPage() {
     }
 
     const initialReturnData = items.map(item => ({
-      ...item,
-      kondisi: 'siap_sewa' 
+      ...item, kondisi: 'siap_sewa' 
     }));
     setReturnItems(initialReturnData);
     setShowReturnModal(true);
@@ -141,17 +180,12 @@ export default function DetailSewaPage() {
         const newStok = kondisi === 'siap_sewa' ? currentStok + qty : currentStok;
 
         await supabase.from('katalog_barang').update({ 
-          stok: newStok, 
-          disewa_count: newDisewaCount 
+          stok: newStok, disewa_count: newDisewaCount 
         }).eq('id', barangId);
 
         if (kondisi !== 'siap_sewa') {
           await supabase.from('perawatan').insert([{
-            barang_id: barangId,
-            jenis: kondisi,
-            qty: qty,
-            catatan: `Dari pengembalian invoice: ${sewa.invoice}`,
-            status: 'aktif'
+            barang_id: barangId, jenis: kondisi, qty: qty, catatan: `Dari pengembalian invoice: ${sewa.invoice}`, status: 'aktif'
           }]);
         }
       }
@@ -167,25 +201,23 @@ export default function DetailSewaPage() {
     }
   };
 
-  // Fungsi Pelunasan (SEKARANG DENGAN VALIDASI)
   const handlePelunasan = async () => {
-    // 1. Cek dulu apakah wajib upload bukti
     const method = (sewa.metode_pembayaran || '').toLowerCase();
     const isCash = method.includes('cash') || method.includes('tunai');
+    const buktiArray = sewa.bukti_pembayaran ? sewa.bukti_pembayaran.split(',') : [];
     
-    // Jika BUKAN cash, dan BUKTI KOSONG, maka tolak proses pelunasan!
-    if (!isCash && !sewa.bukti_pembayaran) {
-      toast.error('Harap unggah bukti pembayaran Transfer/QRIS terlebih dahulu untuk melakukan pelunasan!', { duration: 4000 });
-      return; // Berhenti di sini, modal konfirmasi tidak akan muncul
+    if (!isCash && !hasUploadedPelunasan && buktiArray.length < 2) {
+      if (!window.confirm('Sepertinya Anda belum mengunggah foto BUKTI PELUNASAN yang baru. Apakah yakin ingin melanjutkan tanpa bukti baru?')) {
+        return; 
+      }
+    } else {
+      if (!window.confirm('Apakah Anda yakin pelanggan ini sudah melunasi sisa tagihannya?')) return;
     }
-
-    if (!window.confirm('Apakah Anda yakin pelanggan ini sudah melunasi sisa tagihannya?')) return;
     
     setIsLoading(true);
     try {
       const { error } = await supabase.from('sewa').update({ 
-        dp: sewa.total_harga, 
-        status_pembayaran: 'diterima'
+        dp: sewa.total_harga, status_pembayaran: 'diterima'
       }).eq('id', id);
 
       if (error) throw error;
@@ -200,7 +232,7 @@ export default function DetailSewaPage() {
   const handleKirimWA = () => { 
     let phone = sewa.no_wa.replace(/\D/g, '');
     if (phone.startsWith('0')) phone = '62' + phone.substring(1);
-    const pesan = `Halo Kak ${sewa.nama_penyewa},\n\nBerikut adalah lampiran PDF struk/invoice dari HERAZEALIKHA.\n\nMohon disimpan. Terima kasih!`;
+    const pesan = `Halo Kak ${sewa.nama_penyewa},\n\nBerikut adalah ringkasan invoice/struk sewa dari HERAZEALIKHA.\nTerima kasih!`;
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(pesan)}`, '_blank');
   };
 
@@ -219,8 +251,14 @@ export default function DetailSewaPage() {
   const dp = sewa.dp || 0;
   const sisa = total - dp;
   
-  // Mengecek apakah metode bayar perlu bukti (Bukan Cash/Tunai)
   const isMethodRequiresProof = sewa.metode_pembayaran && !sewa.metode_pembayaran.toLowerCase().includes('cash') && !sewa.metode_pembayaran.toLowerCase().includes('tunai');
+  const buktiArray = sewa.bukti_pembayaran ? sewa.bukti_pembayaran.split(',') : [];
+  
+  const lateStatus = isTerlambat(sewa.tanggal_kembali, sewa.status);
+  const displayStatus = lateStatus ? 'TERLAMBAT' : sewa.status;
+  const statusColor = sewa.status === 'selesai' ? 'bg-green-100 text-green-700' :
+                      lateStatus ? 'bg-red-100 text-red-700 border border-red-200' :
+                      sewa.status === 'dibawa' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700';
 
   return (
     <>
@@ -237,7 +275,6 @@ export default function DetailSewaPage() {
 
       <div id="area-cetak" className="flex flex-col gap-6 min-h-screen pb-24 pt-2 w-full max-w-4xl mx-auto bg-white print:bg-white print:pb-0">
         
-        {/* HEADER & AKSI ATAS */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full bg-white p-5 rounded-2xl shadow-sm border border-purple-200 print:hidden">
           <div className="flex items-center gap-4">
             <button onClick={() => router.push('/sewa')} className="p-2.5 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-xl transition-colors border border-slate-200">
@@ -284,15 +321,15 @@ export default function DetailSewaPage() {
               <Calendar size={18} className="text-purple-600 print:text-black" /> Jadwal & Status
             </h3>
             <div className="grid grid-cols-2 gap-4">
-              <div><p className="text-[11px] font-bold text-slate-500 uppercase">Tgl Ambil</p><p className="text-sm font-semibold text-slate-800 mt-0.5">{new Date(sewa.tanggal_bawa).toLocaleDateString('id-ID')}</p></div>
-              <div><p className="text-[11px] font-bold text-slate-500 uppercase">Tgl Kembali</p><p className="text-sm font-semibold text-slate-800 mt-0.5">{new Date(sewa.tanggal_kembali).toLocaleDateString('id-ID')}</p></div>
+              <div><p className="text-[11px] font-bold text-slate-500 uppercase">Waktu Ambil</p><p className="text-sm font-semibold text-slate-800 mt-0.5">{formatDateTime(sewa.tanggal_bawa)}</p></div>
+              <div>
+                <p className="text-[11px] font-bold text-slate-500 uppercase">Batas Kembali</p>
+                <p className={`text-sm font-semibold mt-0.5 ${lateStatus ? 'text-red-600' : 'text-slate-800'}`}>{formatDateTime(sewa.tanggal_kembali)}</p>
+              </div>
               <div className="col-span-2">
                 <p className="text-[11px] font-bold text-slate-500 uppercase mb-1">Status Penyewaan</p>
-                <span className={`inline-flex px-3 py-1 text-xs font-bold rounded-lg print:border print:border-gray-400 print:bg-white print:text-black ${
-                  sewa.status === 'selesai' ? 'bg-green-100 text-green-700' :
-                  sewa.status === 'dibawa' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'
-                }`}>
-                  {sewa.status.toUpperCase()}
+                <span className={`inline-flex px-3 py-1 text-xs font-bold rounded-lg print:border print:border-gray-400 print:bg-white print:text-black ${statusColor}`}>
+                  {displayStatus.toUpperCase()}
                 </span>
               </div>
             </div>
@@ -338,25 +375,37 @@ export default function DetailSewaPage() {
               <span className={`text-lg font-black print:text-black ${sisa > 0 ? 'text-red-600' : 'text-green-600'}`}>{sisa > 0 ? `Rp ${sisa.toLocaleString('id-ID')}` : 'LUNAS'}</span>
             </div>
             
-            {/* FITUR UPLOAD BUKTI (JIKA BUKAN CASH) */}
+            {/* FITUR UPLOAD BUKTI (MENAMPILKAN BANYAK GAMBAR) */}
             {isMethodRequiresProof && (
               <div className="pt-4 mt-3 border-t border-dashed border-purple-200 print:hidden">
                 <span className="block font-bold text-slate-800 mb-2">Bukti Pembayaran</span>
-                {sewa.bukti_pembayaran ? (
-                  <div className="relative group">
-                    <a href={sewa.bukti_pembayaran} target="_blank" rel="noreferrer">
-                      <img src={sewa.bukti_pembayaran} alt="Bukti Pembayaran" className="w-full h-40 object-cover rounded-xl border border-slate-200 hover:opacity-90 transition-opacity" />
-                    </a>
-                    <p className="text-[10px] text-slate-500 mt-1.5 text-center">Klik gambar untuk memperbesar</p>
+                
+                {buktiArray.length > 0 && (
+                  <div className="flex gap-3 overflow-x-auto mb-3 pb-2">
+                    {buktiArray.map((url: string, idx: number) => (
+                      <div key={idx} className="relative group shrink-0">
+                        <a href={url} target="_blank" rel="noreferrer">
+                          <img src={url} alt={`Bukti ${idx+1}`} className="w-24 h-24 object-cover rounded-xl border border-slate-200 hover:opacity-90 transition-opacity" />
+                        </a>
+                        <span className="absolute bottom-1 left-1 bg-black/70 text-white text-[9px] px-1.5 py-0.5 rounded-md font-bold">
+                          {idx === 0 ? 'Bukti DP' : `Pelunasan ${idx}`}
+                        </span>
+                      </div>
+                    ))}
                   </div>
-                ) : (
+                )}
+
+                {/* Tombol Upload Bukti Pelunasan */}
+                {(sisa > 0 || buktiArray.length === 0) && (
                   <div>
                     <label className="flex items-center justify-center gap-2 w-full px-4 py-3 bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold rounded-xl cursor-pointer border border-purple-200 transition-colors">
                       {isUploadingBukti ? <Loader2 className="animate-spin" size={18} /> : <Upload size={18} />}
-                      {isUploadingBukti ? 'Mengunggah...' : 'Unggah Bukti (Wajib)'}
+                      {isUploadingBukti ? 'Mengunggah...' : (buktiArray.length > 0 ? 'Unggah Bukti Pelunasan' : 'Unggah Bukti (Wajib)')}
                       <input type="file" accept="image/*" className="hidden" onChange={handleUploadBukti} disabled={isUploadingBukti} />
                     </label>
-                    <p className="text-[10px] text-red-500 mt-1.5 text-center font-semibold">* Bukti wajib diunggah untuk menyelesaikan sewa / pelunasan.</p>
+                    <p className="text-[10px] text-slate-500 mt-1.5 text-center font-semibold">
+                      {buktiArray.length > 0 ? '* Silakan unggah bukti khusus pelunasan (baru) jika via transfer.' : '* Bukti wajib diunggah untuk pelunasan/sewa.'}
+                    </p>
                   </div>
                 )}
               </div>
@@ -372,7 +421,6 @@ export default function DetailSewaPage() {
           </div>
         </div>
 
-        {/* AKSI BAWAH: TOMBOL PENGEMBALIAN & SELESAI */}
         {sewa.status === 'dibawa' && (
           <div className="mt-8 border-t border-purple-100 pt-8 print:hidden flex justify-end">
             <button 
@@ -386,7 +434,6 @@ export default function DetailSewaPage() {
         )}
       </div>
 
-      {/* MODAL PENGEMBALIAN BARANG (POP-UP) */}
       {showReturnModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 print:hidden">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
@@ -439,7 +486,6 @@ export default function DetailSewaPage() {
           </div>
         </div>
       )}
-
     </>
   );
 }

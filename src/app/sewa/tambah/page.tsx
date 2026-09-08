@@ -17,9 +17,13 @@ export default function TambahSewaPage() {
   const [noWa, setNoWa] = useState('');
   const [jenisJaminan, setJenisJaminan] = useState('KTP');
   const [noJaminan, setNoJaminan] = useState('');
+  
+  // Waktu
   const [tanggalBawa, setTanggalBawa] = useState('');
+  const [jamBawa, setJamBawa] = useState('10:00'); // Default jam ambil
   const [tanggalKembali, setTanggalKembali] = useState('');
-  const [jamKembali, setJamKembali] = useState('12:00');
+  const [jamKembali, setJamKembali] = useState('20:00'); // Default jam kembali
+  
   const [status, setStatus] = useState('booked');
   
   const [dp, setDp] = useState<number | ''>('');
@@ -74,27 +78,46 @@ export default function TambahSewaPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (cart.length === 0) return toast.error('Keranjang barang masih kosong!');
+    if (!tanggalBawa || !tanggalKembali || !jamBawa || !jamKembali) return toast.error('Harap lengkapi semua tanggal dan jam!');
+    
     setIsSubmitting(true);
-
     const statusPembayaran = metodePembayaran === 'Tunai' ? 'diterima' : 'menunggu';
 
     try {
+      // 🔴 Gabungkan Tanggal dan Jam menjadi satu Teks (YYYY-MM-DD HH:mm)
+      const waktuBawa = `${tanggalBawa} ${jamBawa}`;
+      const waktuKembali = `${tanggalKembali} ${jamKembali}`;
+
       const invoice = `INV-${Date.now()}`;
+      
       const { data: sewaData, error: sewaError } = await supabase
         .from('sewa')
         .insert([{
-          invoice, nama_penyewa: namaPenyewa, no_wa: noWa, jenis_jaminan: jenisJaminan,
-          no_jaminan: noJaminan, tanggal_bawa: tanggalBawa, tanggal_kembali: tanggalKembali,
-          jam_kembali: jamKembali, status, total_harga: totalHarga, dp: Number(dp) || 0,
-          metode_pembayaran: metodePembayaran, status_pembayaran: statusPembayaran
+          invoice, 
+          nama_penyewa: namaPenyewa, 
+          no_wa: noWa, 
+          jenis_jaminan: jenisJaminan,
+          nomor_jaminan: noJaminan, // Disesuaikan dengan penamaan DB
+          tanggal_bawa: waktuBawa, 
+          tanggal_kembali: waktuKembali,
+          jam_kembali: jamKembali, // Tetap disimpan opsional jika kolom ini masih ada di DB Anda
+          status, 
+          total_harga: totalHarga, 
+          dp: Number(dp) || 0,
+          metode_pembayaran: metodePembayaran, 
+          status_pembayaran: statusPembayaran
         }])
         .select('id').single();
 
       if (sewaError) throw sewaError;
 
       const itemsToInsert = cart.map(item => ({
-        sewa_id: sewaData.id, barang_id: item.barang_id, qty: item.qty, harga: item.harga
+        sewa_id: sewaData.id, 
+        barang_id: item.barang_id, 
+        qty: item.qty, 
+        harga: item.harga
       }));
+      
       const { error: itemsError } = await supabase.from('sewa_items').insert(itemsToInsert);
       if (itemsError) throw itemsError;
 
@@ -150,7 +173,7 @@ export default function TambahSewaPage() {
                 <div className="sm:col-span-1">
                   <label className="block text-xs font-semibold mb-1.5 text-slate-700">Jaminan</label>
                   <select value={jenisJaminan} onChange={e => setJenisJaminan(e.target.value)} className="w-full px-3 py-2.5 text-sm rounded-xl bg-purple-50/50 border border-transparent outline-none text-slate-800 focus:border-purple-600 focus:ring-1 focus:ring-purple-600">
-                    <option>KTP</option><option>SIM</option><option>KK</option>
+                    <option>KTP</option><option>SIM</option><option>KK</option><option>Paspor</option>
                   </select>
                 </div>
                 <div className="sm:col-span-2">
@@ -168,14 +191,14 @@ export default function TambahSewaPage() {
               
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold mb-1.5 text-slate-700">Tgl Bawa</label>
-                  <div className="relative">
-                    <Calendar className="absolute left-3 top-3 text-slate-400" size={16} />
-                    <input type="date" value={tanggalBawa} onChange={e => setTanggalBawa(e.target.value)} className="w-full pl-9 pr-3 py-2.5 text-sm rounded-xl bg-purple-50/50 border border-transparent outline-none focus:border-purple-600 focus:ring-1 focus:ring-purple-600 text-slate-800" required />
+                  <label className="block text-xs font-semibold mb-1.5 text-slate-700">Tgl & Jam Ambil</label>
+                  <div className="flex gap-2">
+                    <input type="date" value={tanggalBawa} onChange={e => setTanggalBawa(e.target.value)} className="w-full px-3 py-2.5 text-sm rounded-xl bg-purple-50/50 border border-transparent outline-none focus:border-purple-600 focus:ring-1 focus:ring-purple-600 text-slate-800" required />
+                    <input type="time" value={jamBawa} onChange={e => setJamBawa(e.target.value)} className="w-24 px-2 py-2.5 text-sm rounded-xl bg-purple-50/50 border border-transparent outline-none focus:border-purple-600 focus:ring-1 focus:ring-purple-600 text-slate-800" required />
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold mb-1.5 text-slate-700">Status Transaksi</label>
+                  <label className="block text-xs font-semibold mb-1.5 text-slate-700">Status Awal</label>
                   <select value={status} onChange={e => setStatus(e.target.value)} className="w-full px-3 py-2.5 text-sm rounded-xl bg-purple-50/50 border border-transparent outline-none font-medium text-slate-800 focus:border-purple-600 focus:ring-1 focus:ring-purple-600">
                     <option value="booked">Booked (Booking)</option>
                     <option value="dibawa">Dibawa (Rented)</option>
@@ -184,18 +207,11 @@ export default function TambahSewaPage() {
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold mb-1.5 text-slate-700">Tgl Kembali</label>
-                  <div className="relative">
-                    <Calendar className="absolute left-3 top-3 text-slate-400" size={16} />
-                    <input type="date" value={tanggalKembali} onChange={e => setTanggalKembali(e.target.value)} className="w-full pl-9 pr-3 py-2.5 text-sm rounded-xl bg-purple-50/50 border border-transparent outline-none focus:border-purple-600 focus:ring-1 focus:ring-purple-600 text-slate-800" required />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold mb-1.5 text-slate-700">Jam Kembali</label>
-                  <div className="relative">
-                    <Clock className="absolute left-3 top-3 text-slate-400" size={16} />
-                    <input type="time" value={jamKembali} onChange={e => setJamKembali(e.target.value)} className="w-full pl-9 pr-3 py-2.5 text-sm font-semibold rounded-xl bg-purple-50/50 border border-transparent outline-none focus:border-purple-600 focus:ring-1 focus:ring-purple-600 text-slate-800" required />
+                <div className="col-span-2">
+                  <label className="block text-xs font-semibold mb-1.5 text-red-500">Batas Kembali (Tgl & Jam)</label>
+                  <div className="flex gap-2">
+                    <input type="date" value={tanggalKembali} onChange={e => setTanggalKembali(e.target.value)} className="w-full px-3 py-2.5 text-sm rounded-xl bg-red-50 border border-transparent outline-none focus:border-red-600 focus:ring-1 focus:ring-red-600 text-red-700" required />
+                    <input type="time" value={jamKembali} onChange={e => setJamKembali(e.target.value)} className="w-32 px-2 py-2.5 text-sm rounded-xl bg-red-50 border border-transparent outline-none focus:border-red-600 focus:ring-1 focus:ring-red-600 text-red-700 font-bold" required />
                   </div>
                 </div>
               </div>
