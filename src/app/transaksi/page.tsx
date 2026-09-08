@@ -20,6 +20,9 @@ export default function TransaksiPage() {
   const [transaksiList, setTransaksiList] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   
+  // State Role User
+  const [userRole, setUserRole] = useState('');
+  
   // State Filter
   const [searchQuery, setSearchQuery] = useState('');
   const [filterMode, setFilterMode] = useState<'harian' | 'bulanan'>('harian');
@@ -40,6 +43,10 @@ export default function TransaksiPage() {
 
     const savedSchedules = localStorage.getItem('herazealikha_shifts');
     if (savedSchedules) setSchedules(JSON.parse(savedSchedules));
+
+    // Ambil role dari localStorage
+    const role = localStorage.getItem('userRole') || 'KASIR';
+    setUserRole(role);
   }, []);
 
   const fetchTransaksi = async () => {
@@ -127,7 +134,7 @@ export default function TransaksiPage() {
         sisa,
         `"${item.status_pembayaran}"`,
         `"${item.metode_pembayaran || 'Tunai'}"`,
-        `"${item.bukti_pembayaran || '-'}"` // PERBAIKAN DI SINI
+        `"${item.bukti_pembayaran || '-'}"` 
       ].join(',');
     });
 
@@ -327,7 +334,6 @@ export default function TransaksiPage() {
 
                         {/* KOLOM BUKTI PEMBAYARAN (VIEW FOTO) */}
                         <td className="px-6 py-4 text-center whitespace-nowrap print-hidden">
-                          {/* PERBAIKAN DI SINI: menggunakan item.bukti_pembayaran */}
                           {item.bukti_pembayaran ? (
                             <a 
                               href={item.bukti_pembayaran} 
@@ -348,13 +354,18 @@ export default function TransaksiPage() {
                             <Link href={`/sewa/detail/${item.id}`} className="p-2 text-slate-400 hover:text-purple-700 rounded-lg hover:bg-purple-50 transition-colors" title="Lihat Detail Transaksi">
                               <Eye size={18} />
                             </Link>
-                            <button 
-                              onClick={() => handleDeleteTransaksi(item.id, item.invoice)}
-                              className="p-2 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors"
-                              title="Hapus Transaksi"
-                            >
-                              <Trash2 size={18} />
-                            </button>
+                            
+                            {/* Tombol hapus hanya muncul jika role adalah OWNER */}
+                            {userRole === 'OWNER' && (
+                              <button 
+                                onClick={() => handleDeleteTransaksi(item.id, item.invoice)}
+                                className="p-2 text-slate-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+                                title="Hapus Transaksi"
+                              >
+                                <Trash2 size={18} />
+                              </button>
+                            )}
+                            
                           </div>
                         </td>
                       </tr>

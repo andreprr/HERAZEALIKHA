@@ -2,14 +2,14 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { 
   LayoutDashboard, ReceiptText, CalendarDays, ArrowRightLeft,  
   Users, WashingMachine, Library, Download, Upload, FileText, Settings,
-  Menu, X, ChevronLeft, ChevronRight, UserCircle, Banknote
+  Menu, X, ChevronLeft, ChevronRight, UserCircle, Banknote, ClipboardCheck, LogOut
 } from 'lucide-react';
 
-const menuItems = [
+const allMenuItems = [
   { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/kasir', label: 'Kasir', icon: ReceiptText },
   { path: '/sewa', label: 'Sewa & Booking', icon: CalendarDays },
@@ -17,27 +17,74 @@ const menuItems = [
   { path: '/shift-kas', label: 'Shift Kas', icon: Banknote },
   { path: '/pelanggan', label: 'Pelanggan', icon: Users },
   { path: '/perawatan', label: 'Perawatan', icon: WashingMachine },
-  { path: '/katalog-barang', label: 'Katalog Barang', icon: Library },
-  { path: '/penerimaan', label: 'Penerimaan', icon: Download },
-  { path: '/pengeluaran', label: 'Pengeluaran', icon: Upload },
+  { path: '/opname', label: 'Opname', icon: ClipboardCheck },
   { path: '/laporan', label: 'Laporan', icon: FileText },
-  { path: '/pengaturan', label: 'Pengaturan User', icon: Settings },
+  { path: '/katalog-barang', label: 'Katalog Barang', icon: Library }, 
+  // { path: '/penerimaan', label: 'Penerimaan', icon: Download }, 
+  // { path: '/pengeluaran', label: 'Pengeluaran', icon: Upload }, 
+  { path: '/pengaturan', label: 'Pengaturan User', icon: Settings }, 
+];
+
+const kasirAllowedPaths = [
+  '/dashboard', '/kasir', '/sewa', '/transaksi', '/shift-kas', 
+  '/pelanggan', '/perawatan', '/opname', '/laporan'
 ];
 
 export default function Sidebar({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   
   const [isSidebarOpen, setIsSidebarOpen] = useState(true); 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false); 
+  
+  const [userRole, setUserRole] = useState<'OWNER' | 'KASIR'>('OWNER');
+  const [userName, setUserName] = useState('');
+
+  // 1. CEK SESI LOGIN SAAT HALAMAN DIMUAT
+  useEffect(() => {
+    const savedRole = localStorage.getItem('userRole') as 'OWNER' | 'KASIR';
+    const savedName = localStorage.getItem('userName');
+    
+    if (savedRole) setUserRole(savedRole);
+    if (savedName) setUserName(savedName);
+
+    // Proteksi: Jika belum login, paksa ke halaman login
+    if (!savedRole && !pathname.startsWith('/login')) {
+      router.push('/login');
+    } else if (savedRole === 'KASIR' && !pathname.startsWith('/login')) {
+      // Jika Kasir masuk ke halaman terlarang, tendang ke dashboard
+      const isAllowed = kasirAllowedPaths.some(allowedPath => pathname.startsWith(allowedPath));
+      if (!isAllowed) {
+        router.push('/dashboard');
+      }
+    }
+  }, [pathname, router]);
 
   useEffect(() => {
     setIsMobileMenuOpen(false);
   }, [pathname]);
 
+  const handleLogout = () => {
+    if(window.confirm('Apakah Anda yakin ingin keluar?')) {
+      localStorage.clear();
+      router.push('/login');
+    }
+  };
+
+  // 🔴 KUNCI UTAMA: JIKA SEDANG DI HALAMAN LOGIN, JANGAN RENDER SIDEBAR SAMA SEKALI
+  if (pathname.startsWith('/login')) {
+    return <main className="w-full min-h-screen bg-slate-50">{children}</main>;
+  }
+
+  // Filter menu untuk KASIR
+  const visibleMenuItems = allMenuItems.filter(menu => {
+    if (userRole === 'OWNER') return true; 
+    return kasirAllowedPaths.includes(menu.path); 
+  });
+
   return (
     <div className="flex h-screen bg-white text-slate-800 overflow-hidden font-sans">
       
-      {/* OVERLAY MOBILE */}
       {isMobileMenuOpen && (
         <div 
           className="fixed inset-0 bg-black/50 z-40 lg:hidden backdrop-blur-sm print:hidden"
@@ -45,28 +92,25 @@ export default function Sidebar({ children }: { children: React.ReactNode }) {
         />
       )}
 
-      {/* SIDEBAR (Ditambahkan print:hidden agar tidak ikut tercetak di PDF) */}
       <aside 
         className={`fixed lg:static top-0 left-0 h-full z-50 flex flex-col bg-white border-r border-purple-100 shadow-sm lg:shadow-none transition-all duration-300 ease-in-out print:hidden
           ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
           ${isSidebarOpen ? 'w-64' : 'w-[80px]'}
         `}
       >
-        <div className="flex items-center justify-between h-20 px-6 shrink-0 border-b border-transparent">
-          <Link href="/" className={`flex items-center overflow-hidden transition-all duration-300 ${!isSidebarOpen && 'lg:opacity-0 lg:w-0'}`}>
-            <h1 className="text-xl font-black tracking-widest text-purple-700 whitespace-nowrap">
-              HERAZEALIKHA
-            </h1>
+        <div className="relative flex items-center justify-center py-5 px-4 shrink-0 border-b border-transparent min-h-[5rem]">
+          <Link href="/dashboard" className={`flex items-center justify-center overflow-hidden transition-all duration-300 ${!isSidebarOpen && 'lg:opacity-0 lg:w-0 lg:h-0'}`}>
+            <img src="/gambar.png" alt="Logo Herazealikha" className="w-32 h-auto max-h-24 object-contain" />
           </Link>
           
           {!isSidebarOpen && (
             <div className="hidden lg:flex w-full justify-center">
-              <h1 className="text-2xl font-black text-purple-700">H</h1>
+              <img src="/gambar.png" alt="Logo Herazealikha" className="w-10 h-auto max-h-10 object-contain" />
             </div>
           )}
 
           <button 
-            className="lg:hidden text-slate-500 hover:text-purple-600 transition-colors"
+            className="lg:hidden absolute right-4 top-4 p-1 text-slate-500 hover:bg-slate-100 rounded-lg hover:text-purple-600 transition-colors"
             onClick={() => setIsMobileMenuOpen(false)}
           >
             <X size={24} />
@@ -74,7 +118,7 @@ export default function Sidebar({ children }: { children: React.ReactNode }) {
         </div>
 
         <div className="flex-1 overflow-y-auto hide-scrollbar py-6 px-4 space-y-1.5 flex flex-col items-center">
-          {menuItems.map((menu) => {
+          {visibleMenuItems.map((menu) => {
             const isActive = pathname.startsWith(menu.path);
             
             return (
@@ -111,10 +155,8 @@ export default function Sidebar({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      {/* AREA KONTEN UTAMA */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-white">
         
-        {/* HEADER (Ditambahkan print:hidden agar tidak ikut tercetak di PDF) */}
         <header className="h-20 flex items-center justify-between px-4 sm:px-8 shrink-0 bg-white border-b border-purple-100 print:hidden">
           <div className="flex items-center gap-4">
             <button 
@@ -125,13 +167,26 @@ export default function Sidebar({ children }: { children: React.ReactNode }) {
             </button>
           </div>
 
-          <div className="flex items-center gap-3 sm:gap-5">
-            <div className="flex items-center gap-3 pl-3 sm:pl-5 border-l border-purple-200">
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={handleLogout}
+              className="flex items-center gap-2 bg-red-50 hover:bg-red-100 text-red-600 px-3 py-2 rounded-lg border border-red-100 transition-colors font-bold text-xs"
+            >
+              <LogOut size={16} /> <span className="hidden sm:inline">Logout</span>
+            </button>
+
+            <div className="flex items-center gap-3 pl-4 border-l border-purple-200">
               <div className="text-right hidden sm:block">
-                <p className="text-sm font-bold text-slate-800 leading-tight">Admin Utama</p>
-                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Superadmin</p>
+                <p className="text-sm font-bold text-slate-800 leading-tight">
+                  {userName || 'User System'}
+                </p>
+                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                  {userRole}
+                </p>
               </div>
-              <div className="w-10 h-10 rounded-full bg-purple-100 text-purple-700 border border-purple-200 flex items-center justify-center font-bold">
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold border
+                ${userRole === 'OWNER' ? 'bg-purple-100 text-purple-700 border-purple-200' : 'bg-blue-100 text-blue-700 border-blue-200'}
+              `}>
                 <UserCircle size={24} />
               </div>
             </div>

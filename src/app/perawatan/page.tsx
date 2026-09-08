@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import toast from 'react-hot-toast';
 import { 
-  Scan, Check, Settings2, WashingMachine, ShieldAlert, Loader2, Plus, X
+  Scan, Check, Settings2, WashingMachine, ShieldAlert, Loader2, Plus, X, Wallet
 } from 'lucide-react';
 
 export default function PerawatanPage() {
@@ -21,7 +21,8 @@ export default function PerawatanPage() {
     barang_id: '',
     qty: 1,
     jenis: 'laundry',
-    catatan: ''
+    catatan: '',
+    biaya: 0 // 🔴 State baru untuk Biaya Operasional
   });
 
   useEffect(() => {
@@ -49,7 +50,6 @@ export default function PerawatanPage() {
     }
   };
 
-  // Mengambil data barang yang stoknya lebih dari 0 untuk form input manual
   const fetchKatalog = async () => {
     try {
       const { data, error } = await supabase
@@ -70,7 +70,7 @@ export default function PerawatanPage() {
     setIsAddModalOpen(true);
   };
 
-  // LOGIKA TAMBAH MANUAL (MENGURANGI STOK ETALASE)
+  // LOGIKA TAMBAH MANUAL
   const handleTambahPerawatan = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.barang_id) return toast.error('Pilih barang terlebih dahulu!');
@@ -102,19 +102,33 @@ export default function PerawatanPage() {
 
       if (errInsert) throw errInsert;
 
-      toast.success('Barang dipindahkan ke perawatan & stok kasir disesuaikan!');
-      setIsAddModalOpen(false);
-      setFormData({ barang_id: '', qty: 1, jenis: 'laundry', catatan: '' });
-      fetchPerawatan(); // Refresh data
+      // 3. 🔴 OTOMATIS CATAT KE PENGELUARAN JIKA BIAYA > 0
+      if (formData.biaya > 0) {
+        const { error: errPengeluaran } = await supabase
+          .from('pengeluaran')
+          .insert([{
+            nominal: formData.biaya,
+            kategori: 'Perawatan/Laundry',
+            tanggal: new Date().toISOString().split('T')[0],
+            keterangan: `Biaya ${formData.jenis} untuk ${formData.qty}x ${barang.nama_barang}. ${formData.catatan}`
+          }]);
+        
+        if (errPengeluaran) throw errPengeluaran;
+      }
 
-    } catch (error) {
-      toast.error('Gagal memindahkan barang ke perawatan.');
+      toast.success('Barang dipindahkan ke perawatan & biaya tercatat!');
+      setIsAddModalOpen(false);
+      setFormData({ barang_id: '', qty: 1, jenis: 'laundry', catatan: '', biaya: 0 });
+      fetchPerawatan();
+
+    } catch (error: any) {
+      toast.error('Gagal memproses data: ' + error.message);
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // LOGIKA SELESAI (MENGEMBALIKAN STOK KE ETALASE)
+  // LOGIKA SELESAI
   const handleSelesaiPerawatan = async (id: string, barangId: string, qty: number, namaBarang: string) => {
     if (!window.confirm(`Selesaikan perawatan untuk "${namaBarang}" dan kembalikan ke stok siap sewa?`)) return;
 
@@ -180,7 +194,7 @@ export default function PerawatanPage() {
         </button>
       </div>
 
-      {/* SEARCH BAR (Style Scan) */}
+      {/* SEARCH BAR */}
       <div className="relative w-full">
         <Scan className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
         <input 
@@ -300,15 +314,15 @@ export default function PerawatanPage() {
       {/* MODAL TAMBAH PERAWATAN MANUAL */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col">
-            <div className="p-5 border-b border-purple-100 bg-purple-50 flex justify-between items-center">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-5 border-b border-purple-100 bg-purple-50 flex justify-between items-center shrink-0">
               <h3 className="font-bold text-slate-800 flex items-center gap-2">
                 <ShieldAlert size={20} className="text-pink-600"/> Pindahkan ke Perawatan
               </h3>
               <button onClick={() => setIsAddModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X size={20}/></button>
             </div>
             
-            <form onSubmit={handleTambahPerawatan} className="p-6 space-y-4">
+            <form onSubmit={handleTambahPerawatan} className="p-6 space-y-4 overflow-y-auto">
               <p className="text-xs text-slate-500 mb-4 bg-slate-50 p-3 rounded-lg border border-slate-200">
                 Memindahkan barang ke sini akan <b>otomatis mengurangi stok</b> yang ada di etalase/kasir.
               </p>
@@ -353,6 +367,19 @@ export default function PerawatanPage() {
               </div>
 
               <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase mb-1.5 flex items-center gap-1">
+                  <Wallet size={14}/> Biaya Perawatan / Operasional (Rp)
+                </label>
+                <input 
+                  type="number" min="0" placeholder="0"
+                  value={formData.biaya}
+                  onChange={(e) => setFormData({...formData, biaya: Number(e.target.value)})}
+                  className="w-full px-3 py-2.5 bg-white border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-purple-500 outline-none font-bold text-slate-700"
+                />
+                <p className="text-[10px] text-slate-400 mt-1 italic">*Jika diisi, akan otomatis tercatat ke Laporan Pengeluaran.</p>
+              </div>
+
+              <div>
                 <label className="block text-xs font-bold text-slate-600 uppercase mb-1.5">Keterangan / Catatan</label>
                 <input 
                   type="text" placeholder="Contoh: Ditemukan robek di lemari..."
@@ -362,7 +389,7 @@ export default function PerawatanPage() {
                 />
               </div>
 
-              <div className="pt-4 flex gap-3">
+              <div className="pt-4 flex gap-3 shrink-0">
                 <button type="button" onClick={() => setIsAddModalOpen(false)} className="flex-1 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl transition-colors">Batal</button>
                 <button disabled={isSubmitting} type="submit" className="flex-1 px-4 py-2.5 bg-pink-600 hover:bg-pink-700 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-colors">
                   {isSubmitting ? <Loader2 size={18} className="animate-spin"/> : <Check size={18}/>} Simpan Data

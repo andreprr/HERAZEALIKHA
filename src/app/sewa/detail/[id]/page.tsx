@@ -59,7 +59,7 @@ export default function DetailSewaPage() {
     }
   };
 
-  // 🔴 PENGECEKAN TERLAMBAT BERBASIS WAKTU LOKAL
+  // PENGECEKAN TERLAMBAT BERBASIS WAKTU LOKAL
   const isTerlambat = (tanggalKembali: string, status: string) => {
     if (status === 'selesai' || !tanggalKembali) return false;
     try {
@@ -79,7 +79,7 @@ export default function DetailSewaPage() {
     } catch (err) { return false; }
   };
 
-  // 🔴 FORMATTER TAMPILAN TANPA KONVERSI UTC
+  // FORMATTER TAMPILAN TANPA KONVERSI UTC
   const formatDateTime = (dateString: string) => {
     if (!dateString) return '-';
     let cleanStr = dateString.trim().replace('T', ' ');
@@ -265,9 +265,13 @@ export default function DetailSewaPage() {
       <style dangerouslySetInnerHTML={{
         __html: `
           @media print {
+            /* Menghilangkan URL dan header default browser */
+            @page { margin: 0; } 
+            
+            body { margin: 1cm; }
             body * { visibility: hidden; }
             #area-cetak, #area-cetak * { visibility: visible; }
-            #area-cetak { position: absolute; left: 0; top: 0; width: 100%; padding: 20px; }
+            #area-cetak { position: absolute; left: 0; top: 0; width: 100%; padding: 0; }
             .print\\:hidden { display: none !important; }
           }
         `
@@ -299,8 +303,8 @@ export default function DetailSewaPage() {
 
         <div className="hidden print:flex print:flex-col print:items-center text-center mb-6 pb-4 border-b-2 border-dashed border-gray-300">
           <img src="/logo.jpeg" alt="Logo" className="h-20 w-auto mb-2 object-contain" style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as React.CSSProperties} />
-          <h1 className="text-2xl font-black text-black">Hera Zealikha</h1>
-          <p className="text-sm text-gray-600">Sewa Gaun & Perlengkapan</p>
+          <h1 className="text-2xl font-black text-black">HERAZEALIKHA</h1>
+          <p className="text-sm text-gray-600">Jl. Purwo Km.11 GG.Koramil, Delitua - Medan</p>
           <p className="text-xs text-gray-500 mt-1">Invoice: {sewa.invoice}</p>
         </div>
 
@@ -362,7 +366,7 @@ export default function DetailSewaPage() {
         </div>
 
         {/* RINGKASAN PEMBAYARAN */}
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-purple-200 ml-auto w-full md:w-[28rem] print:border-gray-300 print:shadow-none print:p-4">
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-purple-200 ml-auto w-full md:w-[28rem] print:border-gray-300 print:shadow-none print:p-4 print:mt-4">
           <h3 className="font-bold text-slate-800 flex items-center gap-2 border-b border-purple-100 pb-3 mb-4 print:border-gray-200 print:text-black">
             <CreditCard size={18} className="text-purple-600 print:text-black" /> Ringkasan Pembayaran
           </h3>
@@ -419,6 +423,22 @@ export default function DetailSewaPage() {
               </div>
             )}
           </div>
+        </div>
+
+        {/* 🔴 SYARAT & KETENTUAN (HANYA MUNCUL SAAT DICETAK PDF) */}
+        <div className="hidden print:block mt-8 pt-4 border-t border-dashed border-gray-400">
+          <h4 className="font-bold text-[11px] mb-2 text-black">Syarat & Ketentuan Penyewaan:</h4>
+          <ol className="list-decimal pl-4 pr-2 text-[10px] text-black space-y-1 leading-tight">
+            <li>Wajib membawa Identitas (KTP/dll) & melunasi pembayaran saat pengambilan barang.</li>
+            <li>Uang muka (DP) atau sewa yang sudah dibayarkan tidak dapat dikembalikan / dibatalkan.</li>
+            <li>Pengembalian barang wajib sesuai jadwal. Keterlambatan akan dikenakan denda / <i>charge</i> tambahan.</li>
+            <li>Penyewa wajib menjaga barang. Segala bentuk kerusakan atau kehilangan menjadi tanggung jawab penyewa.</li>
+            <li>Barang dikembalikan dalam keadaan apa adanya (Penyewa <b>tidak perlu</b> mencuci barang).</li>
+            <li>Dengan menyewa, penyewa dianggap telah menyetujui seluruh ketentuan ini.</li>
+          </ol>
+          <p className="text-[10px] text-center font-bold mt-5 text-black">
+            🤍 TERIMA KASIH sudah menyewa, menjaga, dan merawat barang kami 🤍
+          </p>
         </div>
 
         {sewa.status === 'dibawa' && (
