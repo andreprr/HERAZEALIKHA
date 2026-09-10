@@ -2,14 +2,23 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import toast from 'react-hot-toast';
 import { 
-  TrendingUp, Wallet, ArrowDownToLine, PiggyBank, 
-  Landmark, Info, Download, CheckCircle, ShieldAlert, FileText
+  TrendingUp, Wallet, ArrowDownToLine, Bird, 
+  Landmark, Info, Download, CheckCircle, ShieldAlert, FileText,
+  Lock, Settings, X, KeyRound
 } from 'lucide-react';
 
 type DateFilter = 'hari_ini' | '7_hari' | '30_hari' | '90_hari';
 
 export default function LaporanPage() {
+  // --- STATE PIN & AUTENTIKASI ---
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [pinInput, setPinInput] = useState('');
+  const [savedPin, setSavedPin] = useState('1234');
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [newPin, setNewPin] = useState('');
+
   const [filter, setFilter] = useState<DateFilter>('7_hari');
   const [isLoading, setIsLoading] = useState(true);
 
@@ -26,9 +35,45 @@ export default function LaporanPage() {
   // Date Range Display
   const [dateRangeStr, setDateRangeStr] = useState('');
 
+  // --- INISIALISASI PIN ---
   useEffect(() => {
-    fetchLaporan();
-  }, [filter]);
+    const storedPin = localStorage.getItem('herazealikha_laporan_pin');
+    if (storedPin) {
+      setSavedPin(storedPin);
+    } else {
+      localStorage.setItem('herazealikha_laporan_pin', '1234');
+    }
+  }, []);
+
+  // Hanya fetch data jika sudah terautentikasi
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchLaporan();
+    }
+  }, [filter, isAuthenticated]);
+
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (pinInput === savedPin) {
+      setIsAuthenticated(true);
+      toast.success('Akses diberikan');
+    } else {
+      toast.error('PIN yang Anda masukkan salah!');
+      setPinInput('');
+    }
+  };
+
+  const handleSaveNewPin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPin.length !== 4) {
+      return toast.error('PIN harus tepat 4 digit angka!');
+    }
+    localStorage.setItem('herazealikha_laporan_pin', newPin);
+    setSavedPin(newPin);
+    setIsSettingsOpen(false);
+    setNewPin('');
+    toast.success('PIN Laporan berhasil diubah!');
+  };
 
   const getDateRange = (f: DateFilter) => {
     const end = new Date();
@@ -66,7 +111,6 @@ export default function LaporanPage() {
     setDateRangeStr(formatDateLabel(startObj, endObj));
 
     try {
-      // 1. Fetch Transaksi Sewa & Kasir
       const { data: sewaData } = await supabase
         .from('sewa')
         .select('id, total_harga, dp, metode_pembayaran')
@@ -74,14 +118,12 @@ export default function LaporanPage() {
         .lte('created_at', endDate)
         .neq('status', 'batal');
 
-      // 2. Fetch Pengeluaran (Biaya Operasional)
       const { data: pengeluaranData } = await supabase
         .from('pengeluaran')
         .select('nominal')
         .gte('tanggal', startDate.split('T')[0])
         .lte('tanggal', endDate.split('T')[0]);
 
-      // 3. Fetch Sewa Items (Untuk Barang Terlaris & Total Item)
       let allItems: any[] = [];
       if (sewaData && sewaData.length > 0) {
         const sewaIds = sewaData.map(s => s.id);
@@ -93,7 +135,6 @@ export default function LaporanPage() {
         if (itemsData) allItems = itemsData;
       }
 
-      // -- KALKULASI --
       let calcOmzet = 0;
       let calcUangMasuk = 0;
       let metodeMap: Record<string, number> = {};
@@ -101,12 +142,24 @@ export default function LaporanPage() {
       if (sewaData) {
         sewaData.forEach(s => {
           calcOmzet += s.total_harga || 0;
-          // Asumsi uang masuk = DP (atau total harga jika sudah lunas)
+          
           const masuk = s.dp || 0; 
           calcUangMasuk += masuk;
 
-          const method = s.metode_pembayaran || 'Lainnya';
-          metodeMap[method] = (metodeMap[method] || 0) + masuk;
+          const method = s.metode_pembayaran || 'Tunai';
+          
+          if (method.startsWith('SPLIT|')) {
+            const parts = method.split('|');
+            const metode1 = parts[1];
+            const nominal1 = Number(parts[2]) || 0;
+            const metode2 = parts[3];
+            const nominal2 = Number(parts[4]) || 0;
+
+            metodeMap[metode1] = (metodeMap[metode1] || 0) + nominal1;
+            metodeMap[metode2] = (metodeMap[metode2] || 0) + nominal2;
+          } else {
+            metodeMap[method] = (metodeMap[method] || 0) + masuk;
+          }
         });
       }
 
@@ -130,9 +183,8 @@ export default function LaporanPage() {
 
       const topProduk = Object.entries(produkMap)
         .map(([nama, data]) => ({ nama, ...data }))
-        .sort((a, b) => b.omzet - a.omzet); // Urutkan berdasarkan omzet terbesar
+        .sort((a, b) => b.omzet - a.omzet);
 
-      // -- SET STATES --
       setOmzet(calcOmzet);
       setUangMasuk(calcUangMasuk);
       setPengeluaran(calcPengeluaran);
@@ -173,12 +225,48 @@ export default function LaporanPage() {
 
   const formatRp = (num: number) => `Rp ${num.toLocaleString('id-ID')}`;
 
-  const labaKotor = omzet; // Asumsi jasa/sewa tidak ada HPP per barang
+  const labaKotor = omzet; 
   const labaBersih = labaKotor - pengeluaran;
   const persentaseLaba = omzet > 0 ? ((labaBersih / omzet) * 100).toFixed(1) : 0;
 
+  // 🔴 TAMPILAN LOCK SCREEN JIKA BELUM LOGIN
+  if (!isAuthenticated) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[75vh] w-full px-4">
+        <div className="bg-white p-8 rounded-3xl shadow-sm border border-purple-200 max-w-sm w-full text-center">
+          <div className="w-16 h-16 bg-purple-100 text-purple-700 rounded-full flex items-center justify-center mx-auto mb-5">
+            <Lock size={32} />
+          </div>
+          <h2 className="text-2xl font-black text-slate-800 mb-2">Akses Terkunci</h2>
+          <p className="text-slate-500 text-sm mb-6 leading-relaxed">
+            Masukkan 4 digit PIN keamanan untuk mengakses data Laporan. <br/>
+          </p>
+          <form onSubmit={handleLogin} className="space-y-5">
+            <input 
+              type="password" 
+              maxLength={4} 
+              value={pinInput}
+              onChange={(e) => setPinInput(e.target.value.replace(/\D/g, ''))} // Hanya angka
+              className="w-full text-center text-3xl tracking-[1em] font-black text-slate-800 bg-slate-50 border border-purple-200 rounded-2xl py-4 outline-none focus:border-purple-600 focus:ring-2 focus:ring-purple-100 transition-all"
+              placeholder="••••"
+              autoFocus
+            />
+            <button 
+              type="submit" 
+              disabled={pinInput.length !== 4}
+              className="w-full bg-purple-700 hover:bg-purple-800 text-white font-bold py-3.5 rounded-xl transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Buka Laporan
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  // 🔴 TAMPILAN UTAMA LAPORAN
   return (
-    <div className="max-w-6xl mx-auto space-y-6 pb-12">
+    <div className="max-w-6xl mx-auto space-y-6 pb-12 relative">
       
       {/* HEADER LAPORAN */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
@@ -188,8 +276,20 @@ export default function LaporanPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <button onClick={eksporCSV} className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-slate-700 font-bold rounded-xl hover:bg-slate-50 transition-colors shadow-sm text-sm">
+          <button 
+            onClick={eksporCSV} 
+            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-slate-700 font-bold rounded-xl hover:bg-slate-50 transition-colors shadow-sm text-sm"
+          >
             <Download size={16} className="text-purple-600" /> Ekspor CSV
+          </button>
+
+          {/* TOMBOL PENGATURAN PIN */}
+          <button 
+            onClick={() => setIsSettingsOpen(true)} 
+            className="flex items-center justify-center p-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 hover:text-purple-700 transition-colors shadow-sm"
+            title="Ubah PIN Keamanan"
+          >
+            <Settings size={20} />
           </button>
           
           <div className="flex bg-slate-100 p-1 rounded-xl shadow-inner border border-slate-200">
@@ -251,7 +351,7 @@ export default function LaporanPage() {
 
             <div className="bg-white p-5 rounded-2xl border border-pink-200 shadow-sm bg-pink-50/30">
               <div className="flex items-center gap-2 mb-3">
-                <div className="p-1.5 bg-pink-200 text-pink-700 rounded-md"><PiggyBank size={16} /></div>
+                <div className="p-1.5 bg-pink-200 text-pink-700 rounded-md"><Bird size={16} /></div>
                 <span className="text-xs font-bold text-pink-700 uppercase tracking-wider">Laba Bersih</span>
               </div>
               <h3 className="text-2xl font-black text-slate-800">{formatRp(labaBersih)}</h3>
@@ -335,7 +435,7 @@ export default function LaporanPage() {
               </div>
             </div>
 
-            {/* OMZET PER JENIS DOKUMEN (Dummy/Static split jika diperlukan, asumsikan semua 'Penyewaan') */}
+            {/* OMZET PER JENIS DOKUMEN */}
             <div className="bg-white rounded-2xl border border-purple-100 shadow-sm p-5">
               <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2 border-b border-slate-100 pb-3">
                 <FileText size={16} className="text-slate-500" /> Omzet per jenis dokumen
@@ -406,6 +506,50 @@ export default function LaporanPage() {
 
         </>
       )}
+
+      {/* 🔴 MODAL UBAH PIN */}
+      {isSettingsOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200">
+            
+            <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+              <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                <KeyRound size={18} className="text-purple-600" /> Ubah PIN Laporan
+              </h3>
+              <button onClick={() => setIsSettingsOpen(false)} className="text-slate-400 hover:text-slate-600 p-1">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-6">
+              <form onSubmit={handleSaveNewPin} className="space-y-5">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">PIN Baru (4 Digit)</label>
+                  <input 
+                    type="password"
+                    maxLength={4} 
+                    value={newPin}
+                    onChange={(e) => setNewPin(e.target.value.replace(/\D/g, ''))} // Hanya menerima angka
+                    className="w-full text-center text-2xl tracking-[0.5em] font-black text-slate-800 bg-white border border-purple-200 rounded-xl py-3 outline-none focus:border-purple-600 focus:ring-2 focus:ring-purple-100 transition-all"
+                    placeholder="••••"
+                    autoFocus
+                  />
+                </div>
+                
+                <button 
+                  type="submit" 
+                  disabled={newPin.length !== 4}
+                  className="w-full bg-purple-700 hover:bg-purple-800 text-white font-bold py-3 rounded-xl transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Simpan PIN Baru
+                </button>
+              </form>
+            </div>
+
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

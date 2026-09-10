@@ -6,7 +6,8 @@ import { supabase } from '@/lib/supabase';
 import toast from 'react-hot-toast';
 import { 
   Search, CalendarDays, ArrowRightLeft, FileText, Loader2, 
-  CheckCircle, Clock, Package, Eye, Printer, Calendar, Filter, Download, Trash2, Image as ImageIcon
+  CheckCircle, Clock, Package, Eye, Printer, Calendar, Filter, 
+  Download, Trash2, Image as ImageIcon, Lock, Settings, X, KeyRound
 } from 'lucide-react';
 
 const DEFAULT_SHIFTS = [
@@ -17,6 +18,14 @@ const DEFAULT_SHIFTS = [
 
 export default function TransaksiPage() {
   const [isMounted, setIsMounted] = useState(false);
+  
+  // --- STATE PIN & AUTENTIKASI ---
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [pinInput, setPinInput] = useState('');
+  const [savedPin, setSavedPin] = useState('1234');
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [newPin, setNewPin] = useState('');
+
   const [transaksiList, setTransaksiList] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   
@@ -37,17 +46,53 @@ export default function TransaksiPage() {
   
   const [schedules, setSchedules] = useState<any[]>(DEFAULT_SHIFTS);
   
+  // Inisialisasi awal (Mount & Role)
   useEffect(() => {
     setIsMounted(true);
-    fetchTransaksi();
 
     const savedSchedules = localStorage.getItem('herazealikha_shifts');
     if (savedSchedules) setSchedules(JSON.parse(savedSchedules));
 
-    // Ambil role dari localStorage
     const role = localStorage.getItem('userRole') || 'KASIR';
     setUserRole(role);
+
+    const storedPin = localStorage.getItem('herazealikha_transaksi_pin');
+    if (storedPin) {
+      setSavedPin(storedPin);
+    } else {
+      localStorage.setItem('herazealikha_transaksi_pin', '1234');
+    }
   }, []);
+
+  // Fetch data hanya jika sudah login PIN
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchTransaksi();
+    }
+  }, [isAuthenticated]);
+
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (pinInput === savedPin) {
+      setIsAuthenticated(true);
+      toast.success('Akses diberikan');
+    } else {
+      toast.error('PIN yang Anda masukkan salah!');
+      setPinInput('');
+    }
+  };
+
+  const handleSaveNewPin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPin.length !== 4) {
+      return toast.error('PIN harus tepat 4 digit angka!');
+    }
+    localStorage.setItem('herazealikha_transaksi_pin', newPin);
+    setSavedPin(newPin);
+    setIsSettingsOpen(false);
+    setNewPin('');
+    toast.success('PIN Transaksi berhasil diubah!');
+  };
 
   const fetchTransaksi = async () => {
     setIsLoading(true);
@@ -116,14 +161,22 @@ export default function TransaksiPage() {
   const totalPemasukan = filteredData.reduce((sum, item) => sum + (item.dp || 0) + (item.status === 'selesai' ? (item.total_harga - item.dp) : 0), 0);
   const totalPotensi = filteredData.reduce((sum, item) => sum + (item.total_harga || 0), 0);
 
-  // EXPORT EXCEL BESERTA BUKTI PEMBAYARAN
+  // EXPORT EXCEL TANPA BUKTI PEMBAYARAN
   const handleExportCSV = () => {
     if (filteredData.length === 0) return toast.error('Tidak ada data untuk diekspor');
 
-    const headers = ['Waktu', 'Invoice', 'Nama Pelanggan', 'Status Sewa', 'Total Harga', 'Terbayar', 'Sisa', 'Status Pembayaran', 'Metode', 'Bukti Pembayaran (URL)'];
+    const headers = ['Waktu', 'Invoice', 'Nama Pelanggan', 'Status Sewa', 'Total Harga', 'Terbayar', 'Sisa', 'Status Pembayaran', 'Metode'];
     
     const csvRows = filteredData.map(item => {
       const sisa = item.total_harga - (item.dp || 0);
+      
+      // Deteksi Mix Payment untuk Excel
+      let metode = item.metode_pembayaran || 'Tunai';
+      if (metode.startsWith('SPLIT|')) {
+        const parts = metode.split('|');
+        metode = `${parts[1]} & ${parts[3]} (Mix)`;
+      }
+
       return [
         `"${formatDate(item.created_at)}"`,
         `"${item.invoice}"`,
@@ -133,8 +186,7 @@ export default function TransaksiPage() {
         item.dp || 0,
         sisa,
         `"${item.status_pembayaran}"`,
-        `"${item.metode_pembayaran || 'Tunai'}"`,
-        `"${item.bukti_pembayaran || '-'}"` 
+        `"${metode}"`
       ].join(',');
     });
 
@@ -152,7 +204,7 @@ export default function TransaksiPage() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    toast.success('Data Excel (CSV) beserta Bukti Pembayaran berhasil diunduh!');
+    toast.success('Data Laporan (CSV) berhasil diunduh!');
   };
 
   const getStatusBadge = (status: string) => {
@@ -166,6 +218,42 @@ export default function TransaksiPage() {
 
   if (!isMounted) return null;
 
+  // 🔴 TAMPILAN LOCK SCREEN JIKA BELUM LOGIN
+  if (!isAuthenticated) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[75vh] w-full px-4">
+        <div className="bg-white p-8 rounded-3xl shadow-sm border border-purple-200 max-w-sm w-full text-center">
+          <div className="w-16 h-16 bg-purple-100 text-purple-700 rounded-full flex items-center justify-center mx-auto mb-5">
+            <Lock size={32} />
+          </div>
+          <h2 className="text-2xl font-black text-slate-800 mb-2">Akses Terkunci</h2>
+          <p className="text-slate-500 text-sm mb-6 leading-relaxed">
+            Masukkan 4 digit PIN keamanan untuk mengakses data Transaksi. <br/>
+          </p>
+          <form onSubmit={handleLogin} className="space-y-5">
+            <input 
+              type="password" 
+              maxLength={4} 
+              value={pinInput}
+              onChange={(e) => setPinInput(e.target.value.replace(/\D/g, ''))} // Hanya angka
+              className="w-full text-center text-3xl tracking-[1em] font-black text-slate-800 bg-slate-50 border border-purple-200 rounded-2xl py-4 outline-none focus:border-purple-600 focus:ring-2 focus:ring-purple-100 transition-all"
+              placeholder="••••"
+              autoFocus
+            />
+            <button 
+              type="submit" 
+              disabled={pinInput.length !== 4}
+              className="w-full bg-purple-700 hover:bg-purple-800 text-white font-bold py-3.5 rounded-xl transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Buka Transaksi
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  // 🔴 TAMPILAN UTAMA JIKA SUDAH LOGIN
   return (
     <div className="flex flex-col gap-6 h-full pb-8 pt-2 w-full max-w-full overflow-x-hidden relative bg-white">
       
@@ -201,12 +289,21 @@ export default function TransaksiPage() {
           <p className="text-sm text-slate-500 mt-1 truncate">Export laporan ke PDF/Excel per hari, bulan, atau shift.</p>
         </div>
         
-        <div className="flex items-center gap-3 w-full xl:w-auto">
+        <div className="flex flex-wrap items-center gap-3 w-full xl:w-auto">
           <button onClick={handleExportCSV} className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 px-4 rounded-xl text-sm transition-transform shadow-sm">
-            <Download size={16} /> Excel (+ Bukti TF)
+            <Download size={16} /> Export Excel
           </button>
           <button onClick={() => window.print()} className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-purple-700 hover:bg-purple-800 text-white font-bold py-2.5 px-4 rounded-xl text-sm transition-transform shadow-sm">
             <Printer size={16} /> PDF / Cetak
+          </button>
+          
+          {/* TOMBOL PENGATURAN PIN */}
+          <button 
+            onClick={() => setIsSettingsOpen(true)} 
+            className="flex items-center justify-center p-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 hover:text-purple-700 transition-colors shadow-sm"
+            title="Ubah PIN Keamanan"
+          >
+            <Settings size={20} />
           </button>
         </div>
       </div>
@@ -299,7 +396,13 @@ export default function TransaksiPage() {
                   </tr>
                 ) : (
                   filteredData.map((item) => {
-                    const sisaBayar = item.total_harga - (item.dp || 0);
+                    // Deteksi Mix Payment untuk Tabel
+                    let displayMetode = item.metode_pembayaran || 'Tunai';
+                    if (displayMetode.startsWith('SPLIT|')) {
+                      const parts = displayMetode.split('|');
+                      displayMetode = `${parts[1]} & ${parts[3]} (Mix)`;
+                    }
+
                     return (
                       <tr key={item.id} className="hover:bg-purple-50/40 transition-colors group">
                         
@@ -327,7 +430,7 @@ export default function TransaksiPage() {
                             </div>
                             <div className="flex justify-between text-xs">
                               <span className="text-slate-500">Status:</span>
-                              <span className="font-bold uppercase text-[10px] text-purple-700">{item.metode_pembayaran || 'Tunai'}</span>
+                              <span className="font-bold uppercase text-[10px] text-purple-700">{displayMetode}</span>
                             </div>
                           </div>
                         </td>
@@ -378,6 +481,50 @@ export default function TransaksiPage() {
         </div>
 
       </div>
+
+      {/* 🔴 MODAL UBAH PIN */}
+      {isSettingsOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200">
+            
+            <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+              <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                <KeyRound size={18} className="text-purple-600" /> Ubah PIN Transaksi
+              </h3>
+              <button onClick={() => setIsSettingsOpen(false)} className="text-slate-400 hover:text-slate-600 p-1">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-6">
+              <form onSubmit={handleSaveNewPin} className="space-y-5">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">PIN Baru (4 Digit)</label>
+                  <input 
+                    type="password"
+                    maxLength={4} 
+                    value={newPin}
+                    onChange={(e) => setNewPin(e.target.value.replace(/\D/g, ''))} // Hanya menerima angka
+                    className="w-full text-center text-2xl tracking-[0.5em] font-black text-slate-800 bg-white border border-purple-200 rounded-xl py-3 outline-none focus:border-purple-600 focus:ring-2 focus:ring-purple-100 transition-all"
+                    placeholder="••••"
+                    autoFocus
+                  />
+                </div>
+                
+                <button 
+                  type="submit" 
+                  disabled={newPin.length !== 4}
+                  className="w-full bg-purple-700 hover:bg-purple-800 text-white font-bold py-3 rounded-xl transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Simpan PIN Baru
+                </button>
+              </form>
+            </div>
+
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

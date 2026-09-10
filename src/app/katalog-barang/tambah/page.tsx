@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import toast from 'react-hot-toast';
 import { 
-  Save, X, Upload, Tag, Box, DollarSign, Type, List, Plus, Check, Hash, Ruler 
+  Save, X, Upload, Tag, DollarSign, Type, List, Plus, Check, Hash, Ruler 
 } from 'lucide-react';
 
 export default function TambahBarangPage() {
@@ -15,12 +15,10 @@ export default function TambahBarangPage() {
   const [namaBarang, setNamaBarang] = useState('');
   const [kategori, setKategori] = useState('');
   
-  // Field Baru
   const [sku, setSku] = useState('');
   const [varian, setVarian] = useState('');
   
   const [harga, setHarga] = useState('');
-  const [stok, setStok] = useState('');
   const [kelengkapan, setKelengkapan] = useState('');
   
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -105,10 +103,10 @@ export default function TambahBarangPage() {
           {
             nama_barang: namaBarang,
             kategori: kategori,
-            sku: sku || null, // Field baru
-            varian: varian || null, // Field baru
-            harga: Number(harga),
-            stok: Number(stok),
+            sku: sku || null, 
+            varian: varian || null, 
+            harga: Number(harga), // Format string angka dikonversi jadi number
+            stok: 0, // Dikirim angka 0 agar DB tidak error, tapi diabaikan di UI
             kelengkapan: kelengkapan, 
             gambar_url: imageUrl,
           }
@@ -186,47 +184,46 @@ export default function TambahBarangPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+            {/* Kategori Dinamis */}
+            <div>
+              <label className="block text-sm font-bold text-slate-700 mb-2">Kategori</label>
               
-              {/* Bagian Kategori Dinamis */}
-              <div>
-                <label className="block text-sm font-bold text-slate-700 mb-2">Kategori</label>
-                
-                {isAddingKategori ? (
-                  <div className="flex items-center gap-2">
-                    <input 
-                      type="text" 
-                      value={kategoriBaru} 
-                      onChange={(e) => setKategoriBaru(e.target.value)} 
-                      placeholder="Nama kategori..." 
-                      className="w-full px-4 py-3 text-sm rounded-xl bg-purple-50/50 border border-purple-200 focus:border-purple-600 text-slate-800 outline-none"
-                      autoFocus
-                    />
-                    <button type="button" onClick={handleSimpanKategori} className="p-3 bg-purple-700 text-white rounded-xl hover:bg-purple-800 transition-colors shadow-sm">
-                      <Check size={18} />
-                    </button>
-                    <button type="button" onClick={() => setIsAddingKategori(false)} className="p-3 bg-purple-50 text-slate-600 rounded-xl hover:bg-purple-100 transition-colors border border-purple-200">
-                      <X size={18} />
-                    </button>
+              {isAddingKategori ? (
+                <div className="flex items-center gap-2">
+                  <input 
+                    type="text" 
+                    value={kategoriBaru} 
+                    onChange={(e) => setKategoriBaru(e.target.value)} 
+                    placeholder="Nama kategori..." 
+                    className="w-full px-4 py-3 text-sm rounded-xl bg-purple-50/50 border border-purple-200 focus:border-purple-600 text-slate-800 outline-none"
+                    autoFocus
+                  />
+                  <button type="button" onClick={handleSimpanKategori} className="p-3 bg-purple-700 text-white rounded-xl hover:bg-purple-800 transition-colors shadow-sm">
+                    <Check size={18} />
+                  </button>
+                  <button type="button" onClick={() => setIsAddingKategori(false)} className="p-3 bg-purple-50 text-slate-600 rounded-xl hover:bg-purple-100 transition-colors border border-purple-200">
+                    <X size={18} />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <Tag className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                    <select value={kategori} onChange={(e) => setKategori(e.target.value)} className="w-full pl-11 pr-4 py-3 text-sm rounded-xl bg-purple-50/50 border border-purple-200 focus:border-purple-600 text-slate-800 outline-none appearance-none cursor-pointer" required>
+                      <option value="" disabled>Pilih Kategori</option>
+                      {kategoriList.map((cat) => (
+                        <option key={cat.id} value={cat.nama}>{cat.nama}</option>
+                      ))}
+                    </select>
                   </div>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <div className="relative flex-1">
-                      <Tag className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                      <select value={kategori} onChange={(e) => setKategori(e.target.value)} className="w-full pl-11 pr-4 py-3 text-sm rounded-xl bg-purple-50/50 border border-purple-200 focus:border-purple-600 text-slate-800 outline-none appearance-none cursor-pointer" required>
-                        <option value="" disabled>Pilih Kategori</option>
-                        {kategoriList.map((cat) => (
-                          <option key={cat.id} value={cat.nama}>{cat.nama}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <button type="button" onClick={() => setIsAddingKategori(true)} title="Tambah Kategori Baru" className="p-3 bg-purple-50 text-slate-600 rounded-xl hover:bg-purple-100 transition-colors border border-purple-200">
-                      <Plus size={18} />
-                    </button>
-                  </div>
-                )}
-              </div>
+                  <button type="button" onClick={() => setIsAddingKategori(true)} title="Tambah Kategori Baru" className="p-3 bg-purple-50 text-slate-600 rounded-xl hover:bg-purple-100 transition-colors border border-purple-200">
+                    <Plus size={18} />
+                  </button>
+                </div>
+              )}
+            </div>
 
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
               {/* SKU */}
               <div>
                 <label className="block text-sm font-bold text-slate-700 mb-2">Kode / SKU (Opsional)</label>
@@ -235,10 +232,7 @@ export default function TambahBarangPage() {
                   <input type="text" value={sku} onChange={(e) => setSku(e.target.value)} placeholder="Contoh: GN-001" className="w-full pl-11 pr-4 py-3 text-sm rounded-xl bg-purple-50/50 border border-purple-200 focus:border-purple-600 text-slate-800 outline-none" />
                 </div>
               </div>
-            </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-              
               {/* Varian / Ukuran */}
               <div>
                 <label className="block text-sm font-bold text-slate-700 mb-2">Varian / Ukuran (Opsional)</label>
@@ -247,27 +241,28 @@ export default function TambahBarangPage() {
                   <input type="text" value={varian} onChange={(e) => setVarian(e.target.value)} placeholder="Contoh: L, All Size, Mocca" className="w-full pl-11 pr-4 py-3 text-sm rounded-xl bg-purple-50/50 border border-purple-200 focus:border-purple-600 text-slate-800 outline-none" />
                 </div>
               </div>
-
-              {/* Stok */}
-              <div>
-                <label className="block text-sm font-bold text-slate-700 mb-2">Stok Tersedia</label>
-                <div className="relative">
-                  <Box className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                  <input type="number" value={stok} onChange={(e) => setStok(e.target.value)} placeholder="0" min="0" className="w-full pl-11 pr-4 py-3 text-sm rounded-xl bg-purple-50/50 border border-purple-200 focus:border-purple-600 text-slate-800 outline-none" required />
-                </div>
-              </div>
             </div>
 
             <div>
               <label className="block text-sm font-bold text-slate-700 mb-2">Harga Sewa (Rp)</label>
               <div className="relative">
                 <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                <input type="number" value={harga} onChange={(e) => setHarga(e.target.value)} placeholder="Contoh: 250000" min="0" className="w-full pl-11 pr-4 py-3 text-sm rounded-xl bg-purple-50/50 border border-purple-200 focus:border-purple-600 text-slate-800 outline-none" required />
+                <input 
+                  type="text" 
+                  value={harga ? Number(harga).toLocaleString('id-ID') : ''} 
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/\D/g, ''); // Hapus selain angka
+                    setHarga(val);
+                  }} 
+                  placeholder="Contoh: 250.000" 
+                  className="w-full pl-11 pr-4 py-3 text-sm rounded-xl bg-purple-50/50 border border-purple-200 focus:border-purple-600 text-slate-800 outline-none" 
+                  required 
+                />
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-bold text-slate-700 mb-2">Kelengkapan Barang (Opsional)</label>
+              <label className="block text-sm font-bold text-slate-700 mb-2">Keterangan</label>
               <div className="relative">
                 <List className="absolute left-4 top-3 text-slate-400" size={18} />
                 <textarea 

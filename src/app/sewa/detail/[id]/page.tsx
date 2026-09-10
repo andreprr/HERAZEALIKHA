@@ -7,7 +7,7 @@ import toast from 'react-hot-toast';
 import { 
   ArrowLeft, MessageCircle, FileText, User, 
   Calendar, ShoppingBag, CreditCard, Loader2, Printer, CheckCircle,
-  PackageOpen, Upload
+  PackageOpen, Upload, X
 } from 'lucide-react';
 
 export default function DetailSewaPage() {
@@ -19,11 +19,20 @@ export default function DetailSewaPage() {
   const [sewa, setSewa] = useState<any>(null);
   const [items, setItems] = useState<any[]>([]);
 
+  // State Pengembalian
   const [showReturnModal, setShowReturnModal] = useState(false);
   const [returnItems, setReturnItems] = useState<any[]>([]);
+  const [isKelengkapanSesuai, setIsKelengkapanSesuai] = useState(false); 
   const [isReturning, setIsReturning] = useState(false);
+  
   const [isUploadingBukti, setIsUploadingBukti] = useState(false);
-  const [hasUploadedPelunasan, setHasUploadedPelunasan] = useState(false);
+
+  // 🔴 STATE MODAL PELUNASAN
+  const [showPelunasanModal, setShowPelunasanModal] = useState(false);
+  const [pelunasanMetode, setPelunasanMetode] = useState('Transfer');
+  const [pelunasanFile, setPelunasanFile] = useState<File | null>(null);
+  const [pelunasanPreview, setPelunasanPreview] = useState<string>('');
+  const [isProcessingPelunasan, setIsProcessingPelunasan] = useState(false);
 
   useEffect(() => {
     if (id) fetchDetail();
@@ -59,7 +68,6 @@ export default function DetailSewaPage() {
     }
   };
 
-  // PENGECEKAN TERLAMBAT BERBASIS WAKTU LOKAL
   const isTerlambat = (tanggalKembali: string, status: string) => {
     if (status === 'selesai' || !tanggalKembali) return false;
     try {
@@ -79,7 +87,6 @@ export default function DetailSewaPage() {
     } catch (err) { return false; }
   };
 
-  // FORMATTER TAMPILAN TANPA KONVERSI UTC
   const formatDateTime = (dateString: string) => {
     if (!dateString) return '-';
     let cleanStr = dateString.trim().replace('T', ' ');
@@ -97,6 +104,7 @@ export default function DetailSewaPage() {
     return `${parseInt(d)} ${months[parseInt(m)-1]} ${y}, ${timePart} WIB`;
   };
 
+  // UPLOAD BUKTI (MANUAL)
   const handleUploadBukti = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -130,7 +138,6 @@ export default function DetailSewaPage() {
       if (updateError) throw updateError;
 
       toast.success('Bukti pembayaran baru berhasil ditambahkan!');
-      setHasUploadedPelunasan(true); 
       fetchDetail(); 
     } catch (error: any) {
       toast.error('Gagal mengunggah bukti: ' + error.message);
@@ -152,6 +159,7 @@ export default function DetailSewaPage() {
       ...item, kondisi: 'siap_sewa' 
     }));
     setReturnItems(initialReturnData);
+    setIsKelengkapanSesuai(false);
     setShowReturnModal(true);
   };
 
@@ -162,6 +170,10 @@ export default function DetailSewaPage() {
   };
 
   const submitPengembalian = async () => {
+    if (!isKelengkapanSesuai) {
+      return toast.error('Harap centang konfirmasi kesesuaian barang!');
+    }
+
     setIsReturning(true);
     try {
       const { error: sewaErr } = await supabase.from('sewa').update({ status: 'selesai' }).eq('id', id);
@@ -176,7 +188,7 @@ export default function DetailSewaPage() {
         const currentStok = kb?.stok || 0;
         const currentDisewaCount = kb?.disewa_count || 0;
 
-        const newDisewaCount = currentDisewaCount + qty;
+        const newDisewaCount = Math.max(0, currentDisewaCount - qty);
         const newStok = kondisi === 'siap_sewa' ? currentStok + qty : currentStok;
 
         await supabase.from('katalog_barang').update({ 
@@ -201,38 +213,128 @@ export default function DetailSewaPage() {
     }
   };
 
-  const handlePelunasan = async () => {
-    const method = (sewa.metode_pembayaran || '').toLowerCase();
-    const isCash = method.includes('cash') || method.includes('tunai');
-    const buktiArray = sewa.bukti_pembayaran ? sewa.bukti_pembayaran.split(',') : [];
-    
-    if (!isCash && !hasUploadedPelunasan && buktiArray.length < 2) {
-      if (!window.confirm('Sepertinya Anda belum mengunggah foto BUKTI PELUNASAN yang baru. Apakah yakin ingin melanjutkan tanpa bukti baru?')) {
-        return; 
-      }
-    } else {
-      if (!window.confirm('Apakah Anda yakin pelanggan ini sudah melunasi sisa tagihannya?')) return;
-    }
-    
-    setIsLoading(true);
-    try {
-      const { error } = await supabase.from('sewa').update({ 
-        dp: sewa.total_harga, status_pembayaran: 'diterima'
-      }).eq('id', id);
+  // 🔴 COMPRESS BUKTI PELUNASAN
+  const handleFileChangePelunasan = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = document.createElement('img');
+      img.src = event.target?.result as string;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+
+        const MAX_WIDTH = 900;
+        if (width > MAX_WIDTH) {
+          height = Math.round((height * MAX_WIDTH) / width);
+          width = MAX_WIDTH;
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+
+        canvas.toBlob((blob) => {
+          if (!blob) return toast.error('Gagal mengompres gambar.');
+          const compressed = new File([blob], file.name.replace(/\.[^/.]+$/, "") + ".jpg", { type: 'image/jpeg' });
+          setPelunasanFile(compressed);
+          setPelunasanPreview(URL.createObjectURL(compressed));
+        }, 'image/jpeg', 0.7);
+      };
+    };
+  };
+
+  // 🔴 SUBMIT PELUNASAN (MIX PAYMENT)
+  const submitPelunasan = async () => {
+    setIsProcessingPelunasan(true);
+    try {
+      let buktiUrl = undefined;
+      
+      // Upload Bukti (jika Transfer/QRIS)
+      if (pelunasanFile) {
+        const fileName = `pelunasan_${sewa.invoice}_${Date.now()}.jpg`;
+        const { error: uploadError } = await supabase.storage
+          .from('bukti-transfer')
+          .upload(fileName, pelunasanFile, { upsert: true });
+
+        if (uploadError) throw uploadError;
+
+        const { data: urlData } = supabase.storage.from('bukti-transfer').getPublicUrl(fileName);
+        buktiUrl = urlData.publicUrl;
+      }
+      
+      const dpCurrent = Number(sewa.dp) || 0;
+      const sisa = (Number(sewa.total_harga) || 0) - dpCurrent;
+      
+      // LOGIKA MIX PAYMENT (Jika metode awal beda dengan metode lunas)
+      let finalMetode = pelunasanMetode;
+      if (dpCurrent > 0 && sewa.metode_pembayaran !== pelunasanMetode && !(sewa.metode_pembayaran || '').startsWith('SPLIT|')) {
+        finalMetode = `SPLIT|${sewa.metode_pembayaran}|${dpCurrent}|${pelunasanMetode}|${sisa}`;
+      } else if ((sewa.metode_pembayaran || '').startsWith('SPLIT|')) {
+        finalMetode = sewa.metode_pembayaran; // Keep if already split
+      }
+
+      // Gabung dengan bukti sebelumnya jika ada
+      let finalBuktiUrl = sewa.bukti_pembayaran;
+      if (buktiUrl) {
+        finalBuktiUrl = sewa.bukti_pembayaran ? `${sewa.bukti_pembayaran},${buktiUrl}` : buktiUrl;
+      }
+
+      const payload: any = {
+        dp: sewa.total_harga, 
+        metode_pembayaran: finalMetode,
+        status_pembayaran: 'diterima'
+      };
+      
+      if (buktiUrl) payload.bukti_pembayaran = finalBuktiUrl;
+
+      const { error } = await supabase.from('sewa').update(payload).eq('id', id);
       if (error) throw error;
-      toast.success('Pembayaran berhasil dilunasi!');
-      fetchDetail(); 
-    } catch (error) {
-      toast.error('Gagal memproses pelunasan.');
-      setIsLoading(false);
+      
+      toast.success('Pelunasan berhasil diproses!');
+      setShowPelunasanModal(false);
+      setPelunasanFile(null);
+      setPelunasanPreview('');
+      fetchDetail();
+    } catch(err) {
+      toast.error('Gagal memproses pelunasan');
+    } finally {
+      setIsProcessingPelunasan(false);
     }
   };
 
   const handleKirimWA = () => { 
     let phone = sewa.no_wa.replace(/\D/g, '');
     if (phone.startsWith('0')) phone = '62' + phone.substring(1);
-    const pesan = `Halo Kak ${sewa.nama_penyewa},\n\nBerikut adalah ringkasan invoice/struk sewa dari HERAZEALIKHA.\nTerima kasih!`;
+    
+    const itemList = items.map(item => 
+      `- ${item.katalog_barang?.nama_barang} (${item.qty}x) : Rp ${(item.harga * item.qty).toLocaleString('id-ID')}`
+    ).join('\n');
+
+    const sisa = (sewa.total_harga || 0) - (sewa.dp || 0);
+
+    const pesan = `*INVOICE HERAZEALIKHA*
+No: ${sewa.invoice}
+------------------------
+*Pelanggan:* ${sewa.nama_penyewa}
+*Waktu Ambil:* ${formatDateTime(sewa.tanggal_bawa)}
+*Batas Kembali:* ${formatDateTime(sewa.tanggal_kembali)}
+*Jaminan:* ${sewa.jenis_jaminan} - ${sewa.nomor_jaminan || '-'}
+${sewa.kelengkapan ? `*Kelengkapan:* ${sewa.kelengkapan}\n` : ''}------------------------
+*Rincian Barang:*
+${itemList}
+------------------------
+*Total Tagihan:* Rp ${(sewa.total_harga || 0).toLocaleString('id-ID')}
+*Sudah Dibayar:* Rp ${(sewa.dp || 0).toLocaleString('id-ID')}
+*Sisa Tagihan:* Rp ${sisa.toLocaleString('id-ID')}
+------------------------
+Terima kasih telah mempercayakan sewa di HERAZEALIKHA!`;
+
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(pesan)}`, '_blank');
   };
 
@@ -251,7 +353,14 @@ export default function DetailSewaPage() {
   const dp = sewa.dp || 0;
   const sisa = total - dp;
   
-  const isMethodRequiresProof = sewa.metode_pembayaran && !sewa.metode_pembayaran.toLowerCase().includes('cash') && !sewa.metode_pembayaran.toLowerCase().includes('tunai');
+  // Deteksi tampilan jika mix payment di rincian
+  let displayMetode = sewa.metode_pembayaran;
+  if ((displayMetode || '').startsWith('SPLIT|')) {
+    const parts = displayMetode.split('|');
+    displayMetode = `${parts[1]} & ${parts[3]} (Mix)`;
+  }
+
+  const isMethodRequiresProof = sewa.metode_pembayaran && !sewa.metode_pembayaran.toLowerCase().includes('cash') && !sewa.metode_pembayaran.toLowerCase().includes('tunai') && !(sewa.metode_pembayaran || '').startsWith('SPLIT|');
   const buktiArray = sewa.bukti_pembayaran ? sewa.bukti_pembayaran.split(',') : [];
   
   const lateStatus = isTerlambat(sewa.tanggal_kembali, sewa.status);
@@ -265,21 +374,24 @@ export default function DetailSewaPage() {
       <style dangerouslySetInnerHTML={{
         __html: `
           @media print {
-            /* Menghilangkan URL dan header default browser */
-            @page { margin: 0; } 
-            
-            body { margin: 1cm; }
-            body * { visibility: hidden; }
-            #area-cetak, #area-cetak * { visibility: visible; }
-            #area-cetak { position: absolute; left: 0; top: 0; width: 100%; padding: 0; }
+            @page { margin: 0; size: 80mm auto; } 
+            body { margin: 0; padding: 0; background: white; }
             .print\\:hidden { display: none !important; }
+            #thermal-receipt { 
+              display: block !important; 
+              width: 76mm; 
+              margin: 0 auto;
+              font-family: 'Courier New', Courier, monospace; 
+              color: black;
+            }
           }
         `
       }} />
 
-      <div id="area-cetak" className="flex flex-col gap-6 min-h-screen pb-24 pt-2 w-full max-w-4xl mx-auto bg-white print:bg-white print:pb-0">
+      {/* TAMPILAN WEB */}
+      <div className="flex flex-col gap-6 min-h-screen pb-24 pt-2 w-full max-w-4xl mx-auto bg-white print:hidden">
         
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full bg-white p-5 rounded-2xl shadow-sm border border-purple-200 print:hidden">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full bg-white p-5 rounded-2xl shadow-sm border border-purple-200">
           <div className="flex items-center gap-4">
             <button onClick={() => router.push('/sewa')} className="p-2.5 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-xl transition-colors border border-slate-200">
               <ArrowLeft size={18} />
@@ -293,36 +405,30 @@ export default function DetailSewaPage() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button onClick={handleKirimWA} className="flex flex-1 sm:flex-none items-center justify-center gap-2 bg-green-500 hover:bg-green-600 text-white font-bold py-2.5 px-5 rounded-xl text-sm transition-transform hover:scale-[1.02] shadow-sm">
-              <MessageCircle size={18} /> Chat WA
+              <MessageCircle size={18} /> Kirim Struk ke WA
             </button>
             <button onClick={() => window.print()} className="flex flex-1 sm:flex-none items-center justify-center gap-2 bg-purple-700 hover:bg-purple-800 text-white font-bold py-2.5 px-5 rounded-xl text-sm transition-transform hover:scale-[1.02] shadow-sm">
-              <Printer size={18} /> Cetak (PDF)
+              <Printer size={18} /> Cetak Struk
             </button>
           </div>
         </div>
 
-        <div className="hidden print:flex print:flex-col print:items-center text-center mb-6 pb-4 border-b-2 border-dashed border-gray-300">
-          <img src="/logo.jpeg" alt="Logo" className="h-20 w-auto mb-2 object-contain" style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as React.CSSProperties} />
-          <h1 className="text-2xl font-black text-black">HERAZEALIKHA</h1>
-          <p className="text-sm text-gray-600">Jl. Purwo Km.11 GG.Koramil, Delitua - Medan</p>
-          <p className="text-xs text-gray-500 mt-1">Invoice: {sewa.invoice}</p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 print:grid-cols-2 print:gap-4">
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-purple-200 flex flex-col gap-4 print:border-gray-300 print:shadow-none print:p-4">
-            <h3 className="font-bold text-slate-800 flex items-center gap-2 border-b border-purple-100 pb-3 print:border-gray-200">
-              <User size={18} className="text-purple-600 print:text-black" /> Informasi Pelanggan
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-purple-200 flex flex-col gap-4">
+            <h3 className="font-bold text-slate-800 flex items-center gap-2 border-b border-purple-100 pb-3">
+              <User size={18} className="text-purple-600" /> Informasi Pelanggan
             </h3>
             <div className="space-y-3">
               <div><p className="text-[11px] font-bold text-slate-500 uppercase">Nama Penyewa</p><p className="text-sm font-semibold text-slate-800">{sewa.nama_penyewa}</p></div>
               <div><p className="text-[11px] font-bold text-slate-500 uppercase">No. WhatsApp</p><p className="text-sm font-semibold text-slate-800">{sewa.no_wa || '-'}</p></div>
-              <div><p className="text-[11px] font-bold text-slate-500 uppercase">Jaminan Identitas</p><p className="text-sm font-semibold text-slate-800">{sewa.jenis_jaminan || '-'} ({sewa.nomor_jaminan || '-'})</p></div>
+              <div><p className="text-[11px] font-bold text-slate-500 uppercase">Penjamin & Identitas</p><p className="text-sm font-semibold text-slate-800">{sewa.jenis_jaminan || '-'} ({sewa.nomor_jaminan || '-'})</p></div>
+              <div><p className="text-[11px] font-bold text-slate-500 uppercase">Kelengkapan Manual</p><p className="text-sm font-semibold text-slate-800">{sewa.kelengkapan || '-'}</p></div>
             </div>
           </div>
 
-          <div className="bg-white p-6 rounded-2xl shadow-sm border border-purple-200 flex flex-col gap-4 print:border-gray-300 print:shadow-none print:p-4">
-            <h3 className="font-bold text-slate-800 flex items-center gap-2 border-b border-purple-100 pb-3 print:border-gray-200">
-              <Calendar size={18} className="text-purple-600 print:text-black" /> Jadwal & Status
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-purple-200 flex flex-col gap-4">
+            <h3 className="font-bold text-slate-800 flex items-center gap-2 border-b border-purple-100 pb-3">
+              <Calendar size={18} className="text-purple-600" /> Jadwal & Status
             </h3>
             <div className="grid grid-cols-2 gap-4">
               <div><p className="text-[11px] font-bold text-slate-500 uppercase">Waktu Ambil</p><p className="text-sm font-semibold text-slate-800 mt-0.5">{formatDateTime(sewa.tanggal_bawa)}</p></div>
@@ -332,7 +438,7 @@ export default function DetailSewaPage() {
               </div>
               <div className="col-span-2">
                 <p className="text-[11px] font-bold text-slate-500 uppercase mb-1">Status Penyewaan</p>
-                <span className={`inline-flex px-3 py-1 text-xs font-bold rounded-lg print:border print:border-gray-400 print:bg-white print:text-black ${statusColor}`}>
+                <span className={`inline-flex px-3 py-1 text-xs font-bold rounded-lg ${statusColor}`}>
                   {displayStatus.toUpperCase()}
                 </span>
               </div>
@@ -340,24 +446,24 @@ export default function DetailSewaPage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-sm border border-purple-200 overflow-hidden print:border-gray-300 print:shadow-none">
-          <div className="p-5 border-b border-purple-100 bg-purple-50/50 print:bg-gray-100 print:border-gray-300">
-            <h3 className="font-bold text-slate-800 flex items-center gap-2 print:text-black">
-              <ShoppingBag size={18} className="text-purple-600 print:text-black" /> Rincian Barang
+        <div className="bg-white rounded-2xl shadow-sm border border-purple-200 overflow-hidden">
+          <div className="p-5 border-b border-purple-100 bg-purple-50/50">
+            <h3 className="font-bold text-slate-800 flex items-center gap-2">
+              <ShoppingBag size={18} className="text-purple-600" /> Rincian Barang
             </h3>
           </div>
           <div className="overflow-x-auto w-full">
-            <table className="w-full text-left text-sm text-slate-600 print:text-black">
-              <thead className="bg-white text-slate-700 font-semibold border-b border-purple-100 print:border-gray-300">
+            <table className="w-full text-left text-sm text-slate-600">
+              <thead className="bg-white text-slate-700 font-semibold border-b border-purple-100">
                 <tr><th className="px-6 py-3">Nama Barang</th><th className="px-6 py-3 text-center">Harga Satuan</th><th className="px-6 py-3 text-center">Qty</th><th className="px-6 py-3 text-right">Subtotal</th></tr>
               </thead>
-              <tbody className="divide-y divide-purple-50 print:divide-gray-200">
+              <tbody className="divide-y divide-purple-50">
                 {items.map((item, index) => (
-                  <tr key={index} className="hover:bg-slate-50 print:hover:bg-white">
-                    <td className="px-6 py-4 font-semibold text-slate-800 print:text-black">{item.katalog_barang?.nama_barang || 'Item tidak ditemukan'}</td>
+                  <tr key={index} className="hover:bg-slate-50">
+                    <td className="px-6 py-4 font-semibold text-slate-800">{item.katalog_barang?.nama_barang || 'Item tidak ditemukan'}</td>
                     <td className="px-6 py-4 text-center">Rp {item.harga.toLocaleString('id-ID')}</td>
-                    <td className="px-6 py-4 text-center font-bold text-purple-700 print:text-black">{item.qty}x</td>
-                    <td className="px-6 py-4 text-right font-semibold text-slate-800 print:text-black">Rp {(item.harga * item.qty).toLocaleString('id-ID')}</td>
+                    <td className="px-6 py-4 text-center font-bold text-purple-700">{item.qty}x</td>
+                    <td className="px-6 py-4 text-right font-semibold text-slate-800">Rp {(item.harga * item.qty).toLocaleString('id-ID')}</td>
                   </tr>
                 ))}
               </tbody>
@@ -366,22 +472,22 @@ export default function DetailSewaPage() {
         </div>
 
         {/* RINGKASAN PEMBAYARAN */}
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-purple-200 ml-auto w-full md:w-[28rem] print:border-gray-300 print:shadow-none print:p-4 print:mt-4">
-          <h3 className="font-bold text-slate-800 flex items-center gap-2 border-b border-purple-100 pb-3 mb-4 print:border-gray-200 print:text-black">
-            <CreditCard size={18} className="text-purple-600 print:text-black" /> Ringkasan Pembayaran
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-purple-200 ml-auto w-full md:w-[28rem]">
+          <h3 className="font-bold text-slate-800 flex items-center gap-2 border-b border-purple-100 pb-3 mb-4">
+            <CreditCard size={18} className="text-purple-600" /> Ringkasan Pembayaran
           </h3>
-          <div className="space-y-3 text-sm print:text-black">
-            <div className="flex justify-between items-center text-slate-600 print:text-black"><span>Metode Bayar</span><span className="font-bold text-slate-800 print:text-black">{sewa.metode_pembayaran}</span></div>
-            <div className="flex justify-between items-center text-slate-600 print:text-black"><span>Total Tagihan</span><span className="font-bold text-slate-800 print:text-black">Rp {total.toLocaleString('id-ID')}</span></div>
-            <div className="flex justify-between items-center text-slate-600 print:text-black"><span>Sudah Dibayar (DP)</span><span className="font-bold text-green-600 print:text-black">Rp {dp.toLocaleString('id-ID')}</span></div>
-            <div className="pt-3 mt-3 border-t border-dashed border-purple-200 print:border-gray-400 flex justify-between items-center">
-              <span className="font-bold text-slate-800 print:text-black">Sisa Tagihan</span>
-              <span className={`text-lg font-black print:text-black ${sisa > 0 ? 'text-red-600' : 'text-green-600'}`}>{sisa > 0 ? `Rp ${sisa.toLocaleString('id-ID')}` : 'LUNAS'}</span>
+          <div className="space-y-3 text-sm">
+            <div className="flex justify-between items-center text-slate-600"><span>Metode Bayar</span><span className="font-bold text-slate-800">{displayMetode}</span></div>
+            <div className="flex justify-between items-center text-slate-600"><span>Total Tagihan</span><span className="font-bold text-slate-800">Rp {total.toLocaleString('id-ID')}</span></div>
+            <div className="flex justify-between items-center text-slate-600"><span>Sudah Dibayar (DP)</span><span className="font-bold text-green-600">Rp {dp.toLocaleString('id-ID')}</span></div>
+            <div className="pt-3 mt-3 border-t border-dashed border-purple-200 flex justify-between items-center">
+              <span className="font-bold text-slate-800">Sisa Tagihan</span>
+              <span className={`text-lg font-black ${sisa > 0 ? 'text-red-600' : 'text-green-600'}`}>{sisa > 0 ? `Rp ${sisa.toLocaleString('id-ID')}` : 'LUNAS'}</span>
             </div>
             
-            {/* FITUR UPLOAD BUKTI (MENAMPILKAN BANYAK GAMBAR) */}
+            {/* FITUR UPLOAD BUKTI (FALLBACK) */}
             {isMethodRequiresProof && (
-              <div className="pt-4 mt-3 border-t border-dashed border-purple-200 print:hidden">
+              <div className="pt-4 mt-3 border-t border-dashed border-purple-200">
                 <span className="block font-bold text-slate-800 mb-2">Bukti Pembayaran</span>
                 
                 {buktiArray.length > 0 && (
@@ -392,32 +498,32 @@ export default function DetailSewaPage() {
                           <img src={url} alt={`Bukti ${idx+1}`} className="w-24 h-24 object-cover rounded-xl border border-slate-200 hover:opacity-90 transition-opacity" />
                         </a>
                         <span className="absolute bottom-1 left-1 bg-black/70 text-white text-[9px] px-1.5 py-0.5 rounded-md font-bold">
-                          {idx === 0 ? 'Bukti DP' : `Pelunasan ${idx}`}
+                          {idx === 0 ? 'Bukti Awal' : `Tambahan ${idx}`}
                         </span>
                       </div>
                     ))}
                   </div>
                 )}
 
-                {/* Tombol Upload Bukti Pelunasan */}
                 {(sisa > 0 || buktiArray.length === 0) && (
                   <div>
                     <label className="flex items-center justify-center gap-2 w-full px-4 py-3 bg-purple-50 hover:bg-purple-100 text-purple-700 font-bold rounded-xl cursor-pointer border border-purple-200 transition-colors">
                       {isUploadingBukti ? <Loader2 className="animate-spin" size={18} /> : <Upload size={18} />}
-                      {isUploadingBukti ? 'Mengunggah...' : (buktiArray.length > 0 ? 'Unggah Bukti Pelunasan' : 'Unggah Bukti (Wajib)')}
+                      {isUploadingBukti ? 'Mengunggah...' : 'Unggah Bukti Tambahan'}
                       <input type="file" accept="image/*" className="hidden" onChange={handleUploadBukti} disabled={isUploadingBukti} />
                     </label>
-                    <p className="text-[10px] text-slate-500 mt-1.5 text-center font-semibold">
-                      {buktiArray.length > 0 ? '* Silakan unggah bukti khusus pelunasan (baru) jika via transfer.' : '* Bukti wajib diunggah untuk pelunasan/sewa.'}
-                    </p>
                   </div>
                 )}
               </div>
             )}
 
+            {/* 🔴 TOMBOL PELUNASAN (MEMANGGIL MODAL) */}
             {sisa > 0 && (
-              <div className="pt-4 print:hidden">
-                <button onClick={handlePelunasan} className="w-full flex items-center justify-center gap-2 bg-slate-100 hover:bg-green-100 text-slate-700 hover:text-green-700 font-bold py-3 rounded-xl transition-all shadow-sm text-sm border border-slate-200 hover:border-green-300">
+              <div className="pt-4">
+                <button 
+                  onClick={() => setShowPelunasanModal(true)} 
+                  className="w-full flex items-center justify-center gap-2 bg-slate-100 hover:bg-green-100 text-slate-700 hover:text-green-700 font-bold py-3 rounded-xl transition-all shadow-sm text-sm border border-slate-200 hover:border-green-300"
+                >
                   <CheckCircle size={18} /> Konfirmasi Pelunasan
                 </button>
               </div>
@@ -425,45 +531,223 @@ export default function DetailSewaPage() {
           </div>
         </div>
 
-        {/* 🔴 SYARAT & KETENTUAN (HANYA MUNCUL SAAT DICETAK PDF) */}
-        <div className="hidden print:block mt-8 pt-4 border-t border-dashed border-gray-400">
-          <h4 className="font-bold text-[11px] mb-2 text-black">Syarat & Ketentuan Penyewaan:</h4>
-          <ol className="list-decimal pl-4 pr-2 text-[10px] text-black space-y-1 leading-tight">
-            <li>Wajib membawa Identitas (KTP/dll) & melunasi pembayaran saat pengambilan barang.</li>
-            <li>Uang muka (DP) atau sewa yang sudah dibayarkan tidak dapat dikembalikan / dibatalkan.</li>
-            <li>Pengembalian barang wajib sesuai jadwal. Keterlambatan akan dikenakan denda / <i>charge</i> tambahan.</li>
-            <li>Penyewa wajib menjaga barang. Segala bentuk kerusakan atau kehilangan menjadi tanggung jawab penyewa.</li>
-            <li>Barang dikembalikan dalam keadaan apa adanya (Penyewa <b>tidak perlu</b> mencuci barang).</li>
-            <li>Dengan menyewa, penyewa dianggap telah menyetujui seluruh ketentuan ini.</li>
-          </ol>
-          <p className="text-[10px] text-center font-bold mt-5 text-black">
-            🤍 TERIMA KASIH sudah menyewa, menjaga, dan merawat barang kami 🤍
-          </p>
-        </div>
-
-        {sewa.status === 'dibawa' && (
-          <div className="mt-8 border-t border-purple-100 pt-8 print:hidden flex justify-end">
+        {/* TOMBOL PENGEMBALIAN */}
+        {(sewa.status === 'dibawa' || lateStatus) && (
+          <div className="mt-8 border-t border-purple-100 pt-8 flex justify-end">
             <button 
               onClick={handleOpenReturnModal}
               className="flex items-center gap-2 bg-pink-600 hover:bg-pink-700 text-white font-bold py-4 px-8 rounded-2xl shadow-lg hover:shadow-xl transition-all hover:-translate-y-1"
             >
               <PackageOpen size={20} />
-              Proses Pengembalian Barang
+              Selesaikan Barang (Kembali)
             </button>
           </div>
         )}
       </div>
 
+      {/* STRUK THERMAL */}
+      <div id="thermal-receipt" className="hidden print:block text-black p-2 bg-white">
+        <div className="text-center mb-4">
+          <img src="/logo.jpeg" alt="Logo" className="w-16 mx-auto mb-1 grayscale" style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as React.CSSProperties} />
+          <h1 className="text-lg font-black tracking-widest">HERAZEALIKHA</h1>
+          <p className="text-[10px]">Jl. Purwo Km.11 GG.Koramil, Delitua<br/>Medan</p>
+          <p className="text-[10px] mt-1">Invoice: {sewa.invoice}</p>
+        </div>
+
+        <div className="border-b border-dashed border-black mb-3"></div>
+
+        <div className="grid grid-cols-2 gap-2 text-[10px] mb-3">
+          <div>
+            <p className="font-bold uppercase underline">Informasi Pelanggan</p>
+            <p className="mt-1 font-bold text-[9px] uppercase">NAMA PENYEWA</p>
+            <p className="leading-tight">{sewa.nama_penyewa}</p>
+            <p className="mt-1 font-bold text-[9px] uppercase">NO. WHATSAPP</p>
+            <p className="leading-tight">{sewa.no_wa || '-'}</p>
+            <p className="mt-1 font-bold text-[9px] uppercase">JAMINAN IDENTITAS</p>
+            <p className="leading-tight">{sewa.jenis_jaminan || '-'} ({sewa.nomor_jaminan || '-'})</p>
+          </div>
+          <div>
+            <p className="font-bold uppercase underline">Jadwal & Status</p>
+            <div className="flex gap-2 mt-1">
+              <div>
+                <p className="font-bold text-[9px] uppercase">WAKTU AMBIL</p>
+                <p className="leading-tight">{formatDateTime(sewa.tanggal_bawa).replace(' ', '\n')}</p>
+              </div>
+              <div>
+                <p className="font-bold text-[9px] uppercase">BATAS KEMBALI</p>
+                <p className="leading-tight">{formatDateTime(sewa.tanggal_kembali).replace(' ', '\n')}</p>
+              </div>
+            </div>
+            <p className="mt-2 font-bold text-[9px] uppercase">STATUS PENYEWAAN</p>
+            <p className="leading-tight font-bold border border-black inline-block px-1 mt-0.5">{displayStatus.toUpperCase()}</p>
+          </div>
+        </div>
+
+        <div className="border-b border-dashed border-black mb-3"></div>
+
+        <div className="text-[11px] mb-3">
+          <p className="font-bold mb-2 flex items-center gap-1">Rincian Barang</p>
+          <table className="w-full text-left">
+            <thead>
+              <tr className="border-b border-black">
+                <th className="font-normal pb-1">Nama Barang</th>
+                <th className="font-normal pb-1 text-right">Harga Satuan</th>
+                <th className="font-normal pb-1 text-right">Qty</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item, idx) => (
+                <tr key={idx}>
+                  <td className="py-2 pr-1 align-top">{item.katalog_barang?.nama_barang}</td>
+                  <td className="py-2 px-1 text-right align-top">Rp {item.harga.toLocaleString('id-ID')}</td>
+                  <td className="py-2 pl-1 text-right font-bold align-top">{item.qty}x</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          
+          {sewa.kelengkapan && (
+             <p className="mt-2 pt-2 border-t border-dotted border-black text-[10px]">
+               <span className="font-bold">Kelengkapan Manual:</span> {sewa.kelengkapan}
+             </p>
+          )}
+        </div>
+
+        <div className="border-b border-dashed border-black mb-3"></div>
+
+        <div className="text-[11px] mb-4 space-y-1">
+          <p className="font-bold mb-2">Ringkasan Pembayaran</p>
+          <div className="flex justify-between"><span>Metode Bayar</span><span>{displayMetode}</span></div>
+          <div className="flex justify-between"><span>Total Tagihan</span><span>Rp {total.toLocaleString('id-ID')}</span></div>
+          <div className="flex justify-between"><span>Sudah Dibayar (DP)</span><span>Rp {dp.toLocaleString('id-ID')}</span></div>
+          <div className="flex justify-between font-bold text-[12px] pt-1 mt-1 border-t border-black">
+            <span>Sisa Tagihan</span><span>{sisa > 0 ? `Rp ${sisa.toLocaleString('id-ID')}` : 'LUNAS'}</span>
+          </div>
+        </div>
+
+        <div className="border-b border-dashed border-black mb-3"></div>
+
+        <div className="text-[9px] leading-tight">
+          <p className="font-bold mb-1">Syarat & Ketentuan Penyewaan:</p>
+          <ol className="list-decimal pl-3 pr-1 space-y-1">
+            <li>Wajib membawa identitas (KTP/dll) & melunasi pembayaran saat pengambilan barang.</li>
+            <li>Uang muka (DP) atau sewa yang sudah dibayarkan tidak dapat dikembalikan / dibatalkan.</li>
+            <li>Pengembalian barang wajib sesuai jadwal. Keterlambatan dikenakan denda / charge tambahan.</li>
+            <li>Segala bentuk kerusakan atau kehilangan barang menjadi tanggung jawab penyewa sepenuhnya.</li>
+            <li>Barang dikembalikan dalam keadaan apa adanya (Penyewa tidak perlu mencuci barang).</li>
+            <li>Dengan menyewa, penyewa dianggap telah menyetujui seluruh ketentuan ini.</li>
+          </ol>
+          <p className="text-center font-bold mt-4 mb-8">
+            TERIMA KASIH sudah menyewa, menjaga, dan merawat barang kami
+          </p>
+        </div>
+      </div>
+
+      {/* 🔴 MODAL PELUNASAN TAGIHAN */}
+      {showPelunasanModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm print:hidden">
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-green-50/50">
+              <h3 className="font-bold text-green-700 flex items-center gap-2">
+                <CheckCircle size={18} /> Proses Pelunasan Tagihan
+              </h3>
+              <button onClick={() => setShowPelunasanModal(false)} className="p-1.5 text-slate-400 hover:bg-slate-200 rounded-lg">
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="p-5 space-y-4">
+              <div className="flex justify-between text-sm font-bold text-slate-600">
+                <span>Total Tagihan:</span>
+                <span>Rp {total.toLocaleString('id-ID')}</span>
+              </div>
+              <div className="flex justify-between text-sm font-bold text-slate-600">
+                <span>Sudah Dibayar (DP):</span>
+                <span>Rp {dp.toLocaleString('id-ID')}</span>
+              </div>
+              <div className="flex justify-between text-lg font-black text-red-600 bg-red-50 p-3 rounded-xl border border-red-100">
+                <span>Sisa Pelunasan:</span>
+                <span>Rp {sisa.toLocaleString('id-ID')}</span>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Pilih Metode Pelunasan</label>
+                <select 
+                  value={pelunasanMetode} 
+                  onChange={e => setPelunasanMetode(e.target.value)} 
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-green-500 focus:outline-none text-sm font-bold text-slate-800"
+                >
+                  <option value="Tunai">Tunai</option>
+                  <option value="Transfer">Transfer</option>
+                  <option value="QRIS">QRIS</option>
+                </select>
+              </div>
+
+              {pelunasanMetode !== 'Tunai' && (
+                <div className="pt-2">
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-2 flex items-center gap-1">
+                    <Upload size={14} className="text-green-600" /> Upload Bukti Pelunasan <span className="text-green-600 normal-case">(Wajib)</span>
+                  </label>
+                  <input 
+                    type="file" 
+                    accept="image/*"
+                    onChange={handleFileChangePelunasan}
+                    className="w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-green-50 file:text-green-700 hover:file:bg-green-100 cursor-pointer border border-slate-200 rounded-xl p-1 bg-slate-50"
+                  />
+                  {pelunasanPreview && (
+                    <div className="mt-3 p-2 border border-slate-200 rounded-xl bg-slate-50 flex justify-center h-32 relative">
+                      <img src={pelunasanPreview} alt="Preview Bukti" className="h-full object-contain rounded-lg" />
+                      <button onClick={() => { setPelunasanFile(null); setPelunasanPreview(''); }} className="absolute top-1 right-1 bg-white/80 p-1 rounded-md text-red-500 hover:text-red-700 shadow-sm"><X size={14}/></button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 border-t border-slate-100 bg-slate-50 flex gap-3">
+              <button onClick={() => setShowPelunasanModal(false)} className="flex-1 py-3 rounded-xl font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-100 transition-colors">Batal</button>
+              <button 
+                onClick={submitPelunasan} 
+                disabled={isProcessingPelunasan || (pelunasanMetode !== 'Tunai' && !pelunasanFile)}
+                className="flex-1 py-3 rounded-xl font-bold text-white bg-green-600 hover:bg-green-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm"
+              >
+                {isProcessingPelunasan ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle size={16} />}
+                Lunasi Sekarang
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL PENGEMBALIAN */}
       {showReturnModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 print:hidden">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
             
             <div className="p-6 border-b border-purple-100 bg-purple-50/50">
               <h3 className="text-xl font-bold text-slate-800">Cek Kondisi Barang Kembali</h3>
-              <p className="text-sm text-slate-500 mt-1">Pilih status barang. Barang rusak/kotor akan masuk daftar perawatan.</p>
+              <p className="text-sm text-slate-500 mt-1">Pastikan barang dan aksesoris kembali utuh. Pilih status untuk setiap barang.</p>
             </div>
             
             <div className="p-6 overflow-y-auto flex-1 space-y-4">
+              <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl mb-2">
+                <p className="text-sm font-bold text-amber-800 mb-1">Pengecekan Kelengkapan</p>
+                <p className="text-xs text-amber-700 mb-4">Catatan Kelengkapan: <b>{sewa.kelengkapan || 'Tidak ada catatan kelengkapan (Aman)'}</b></p>
+                <label className="flex items-start gap-3 cursor-pointer group">
+                  <div className="pt-0.5">
+                    <input 
+                      type="checkbox" 
+                      checked={isKelengkapanSesuai} 
+                      onChange={(e) => setIsKelengkapanSesuai(e.target.checked)}
+                      className="w-5 h-5 text-purple-600 rounded border-gray-300 focus:ring-purple-500 cursor-pointer"
+                    />
+                  </div>
+                  <span className="text-sm font-semibold text-slate-800 group-hover:text-purple-700 transition-colors">
+                    Ya, saya telah memeriksa bahwa semua barang utama beserta kelengkapannya telah sesuai dan lengkap dikembalikan.
+                  </span>
+                </label>
+              </div>
+
               {returnItems.map((item, index) => (
                 <div key={item.id} className="p-4 border border-slate-200 rounded-xl bg-slate-50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
@@ -494,9 +778,9 @@ export default function DetailSewaPage() {
                 Batal
               </button>
               <button 
-                disabled={isReturning}
+                disabled={isReturning || !isKelengkapanSesuai}
                 onClick={submitPengembalian}
-                className="px-6 py-2.5 rounded-xl font-bold text-white bg-pink-600 hover:bg-pink-700 transition-colors flex items-center gap-2"
+                className="px-6 py-2.5 rounded-xl font-bold text-white bg-pink-600 hover:bg-pink-700 disabled:opacity-50 disabled:hover:bg-pink-600 transition-colors flex items-center gap-2"
               >
                 {isReturning ? <Loader2 size={18} className="animate-spin"/> : <CheckCircle size={18} />}
                 Simpan & Selesaikan Transaksi

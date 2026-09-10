@@ -26,15 +26,37 @@ export default function KatalogBarangPage() {
   const fetchBarang = async () => {
     setIsLoading(true);
     try {
-      // Pastikan tabel katalog_barang Anda sudah memiliki kolom: 
-      // sku, varian, harga, stok, kelengkapan, dan gambar_url
-      const { data, error } = await supabase
+      // 1. Ambil Data Katalog
+      const { data: brg, error: errBrg } = await supabase
         .from('katalog_barang')
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
-      if (data) setBarangList(data);
+      if (errBrg) throw errBrg;
+
+      // 2. Ambil Transaksi Aktif untuk menghitung berapa yang sedang disewa
+      const { data: activeRentals, error: errRentals } = await supabase
+        .from('sewa')
+        .select('id, status, sewa_items(barang_id, qty)')
+        .in('status', ['booking', 'dibawa', 'terlambat']);
+
+      if (errRentals) throw errRentals;
+
+      // 3. Gabungkan Data (Hitung Sedang Disewa)
+      const processedBrg = (brg || []).map(item => {
+        let sedangDisewaQty = 0;
+
+        activeRentals?.forEach(rental => {
+          const rentedItems = rental.sewa_items.filter((si: any) => si.barang_id === item.id);
+          rentedItems.forEach(rentedItem => {
+            sedangDisewaQty += rentedItem.qty;
+          });
+        });
+
+        return { ...item, sedang_disewa: sedangDisewaQty };
+      });
+
+      setBarangList(processedBrg);
     } catch (error: any) {
       toast.error('Gagal mengambil data barang.');
     } finally {
@@ -137,7 +159,7 @@ export default function KatalogBarangPage() {
           {filteredData.map((item) => (
             <div key={item.id} className="bg-white rounded-2xl shadow-sm border border-purple-200 overflow-hidden flex flex-col group hover:shadow-md transition-shadow">
               
-              {/* Gambar Barang (Tinggi Diatur Proporsional & Tidak Terlalu Besar) */}
+              {/* Gambar Barang */}
               <div className="relative w-full h-40 bg-purple-50/50 border-b border-purple-100 flex items-center justify-center overflow-hidden shrink-0">
                 {item.gambar_url ? (
                   <img 
@@ -165,7 +187,7 @@ export default function KatalogBarangPage() {
                   {item.nama_barang}
                 </h3>
                 
-                {/* Rincian Spesifikasi (SKU, Varian, Kelengkapan) */}
+                {/* Rincian Spesifikasi */}
                 <div className="space-y-1.5 mb-3">
                   <div className="flex items-center gap-1.5 text-[10px] text-slate-600 font-medium">
                     <Hash size={12} className="text-slate-400" />
@@ -183,16 +205,19 @@ export default function KatalogBarangPage() {
                   </div>
                 </div>
                 
-                {/* STOK BARANG */}
+                {/* 🔴 MENGGANTIKAN STOK MENJADI STATUS SEDANG DISEWA */}
                 <div className="flex items-center gap-2 mb-3">
-                  <span className={`inline-flex items-center gap-1.5 px-2 py-1 text-[10px] font-bold rounded-md ${
-                    item.stok > 0 
-                      ? 'bg-green-100 text-green-700' 
-                      : 'bg-red-100 text-red-700'
-                  }`}>
-                    <Box size={12} />
-                    {item.stok > 0 ? `Sisa Stok: ${item.stok}` : 'Stok Habis'}
-                  </span>
+                  {item.sedang_disewa > 0 ? (
+                    <span className="inline-flex items-center gap-1.5 px-2 py-1 bg-amber-100 text-amber-700 text-[10px] font-bold rounded-md">
+                      <PackageCheck size={12} />
+                      Sedang disewa: {item.sedang_disewa}
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 px-2 py-1 bg-slate-100 text-slate-500 text-[10px] font-bold rounded-md">
+                      <Box size={12} />
+                      Belum ada penyewa
+                    </span>
+                  )}
                 </div>
 
                 {/* HARGA SEWA */}

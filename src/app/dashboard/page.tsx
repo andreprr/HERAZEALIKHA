@@ -3,9 +3,9 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { 
-  Wallet, Package, ArrowUpRight, ArrowDownRight, PiggyBank,
+  Wallet, Package, ArrowUpRight, ArrowDownRight, Bird,
   Activity, Loader2, Calendar, AlertTriangle, Clock, 
-  Wrench, CheckCircle, Filter, Users
+  CheckCircle, Filter, Users
 } from 'lucide-react';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, 
@@ -31,8 +31,7 @@ export default function DashboardPage() {
   const [opsStats, setOpsStats] = useState({
     terlambat: 0,
     jatuhTempo: 0,
-    sedangDisewa: 0,
-    perawatan: 0
+    sedangDisewa: 0
   });
 
   useEffect(() => {
@@ -56,7 +55,7 @@ export default function DashboardPage() {
       const { data: activeSewa } = await supabase
         .from('sewa')
         .select('id, status, tanggal_kembali')
-        .eq('status', 'dibawa');
+        .in('status', ['dibawa', 'terlambat']); // Termasuk yang terlambat jika statusnya sudah diubah
 
       let countTerlambat = 0;
       let countJatuhTempo = 0;
@@ -65,8 +64,15 @@ export default function DashboardPage() {
       if (activeSewa) {
         countSedangDisewa = activeSewa.length;
         activeSewa.forEach(item => {
+          // Menyesuaikan logika tanggal seperti di Booking
+          let cleanStr = item.tanggal_kembali.trim().replace(' ', 'T');
+          if (cleanStr.length === 10) cleanStr += 'T23:59:00';
+          
+          const expectedTime = new Date(cleanStr).getTime();
+          const nowTime = new Date().getTime();
           const tglKembali = item.tanggal_kembali.split(' ')[0]; 
-          if (tglKembali < todayStr) {
+
+          if (nowTime > expectedTime) {
             countTerlambat++;
           } else if (tglKembali === todayStr) {
             countJatuhTempo++;
@@ -74,21 +80,10 @@ export default function DashboardPage() {
         });
       }
 
-      let countPerawatan = 0;
-      try {
-        const { data: rawatData } = await supabase
-          .from('perawatan')
-          .select('qty')
-          .eq('status', 'aktif');
-          
-        countPerawatan = rawatData?.reduce((sum, item) => sum + (item.qty || 1), 0) || 0;
-      } catch (e) {}
-
       setOpsStats({
         terlambat: countTerlambat,
         jatuhTempo: countJatuhTempo,
-        sedangDisewa: countSedangDisewa,
-        perawatan: countPerawatan
+        sedangDisewa: countSedangDisewa
       });
 
       // ==========================================
@@ -254,7 +249,8 @@ export default function DashboardPage() {
       {/* 1. STATISTIK OPERASIONAL (CURRENT SNAPSHOT) */}
       <div>
         <h3 className="text-sm font-bold text-slate-700 mb-3 ml-1">Status Sewa (Real-time)</h3>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Diubah menjadi 3 Kolom */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-6">
           
           <div className="bg-white p-5 rounded-2xl shadow-sm border border-red-100 flex flex-col justify-center transition-shadow hover:shadow-md">
             <div className="flex items-center gap-3 mb-3">
@@ -280,22 +276,12 @@ export default function DashboardPage() {
             <p className="text-3xl font-black text-blue-600">{opsStats.sedangDisewa}</p>
           </div>
 
-          <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-center transition-shadow hover:shadow-md">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="p-2 bg-slate-50 rounded-xl text-slate-600 shrink-0 border border-slate-200"><Wrench size={18} /></div>
-              <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Dalam Perawatan</p>
-            </div>
-            <p className="text-3xl font-black text-slate-700">{opsStats.perawatan}</p>
-          </div>
-
         </div>
       </div>
 
       {/* 2. STATISTIK FINANSIAL & PELANGGAN */}
       <div>
         <h3 className="text-sm font-bold text-slate-700 mb-3 ml-1">Ringkasan Kinerja ({filterMode === 'harian' ? 'Hari Ini' : 'Bulan Ini'})</h3>
-        
-        {/* DIBUBAH MENJADI 3 KOLOM AGAR KARTU LEBIH LEBAR DAN TEKS UANG MUAT */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6">
           
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-purple-100 flex flex-col justify-center relative overflow-hidden group hover:border-purple-300 transition-all hover:shadow-md">
@@ -343,10 +329,11 @@ export default function DashboardPage() {
             <p className="text-3xl font-black text-slate-800 relative z-10 tracking-tight">Rp {finStats.totalPengeluaran.toLocaleString('id-ID')}</p>
           </div>
 
+          {/* ICON LABA BERSIH DIGANTI MENJADI BIRD (AYAM) */}
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-teal-200 flex flex-col justify-center relative overflow-hidden group hover:border-teal-400 transition-all hover:shadow-md bg-gradient-to-br from-white to-teal-50/30">
-            <div className="absolute -right-4 -bottom-4 opacity-[0.03] pointer-events-none text-teal-900 group-hover:scale-110 group-hover:opacity-[0.06] transition-all duration-500"><PiggyBank size={140} /></div>
+            <div className="absolute -right-4 -bottom-4 opacity-[0.03] pointer-events-none text-teal-900 group-hover:scale-110 group-hover:opacity-[0.06] transition-all duration-500"><Bird size={140} /></div>
             <div className="flex items-center gap-3 mb-4 relative z-10">
-              <div className="p-2.5 bg-teal-100 rounded-xl text-teal-700 shrink-0 shadow-sm"><PiggyBank size={20} /></div>
+              <div className="p-2.5 bg-teal-100 rounded-xl text-teal-700 shrink-0 shadow-sm"><Bird size={20} /></div>
               <p className="text-xs font-bold text-teal-700 uppercase tracking-wider">Laba Bersih</p>
             </div>
             <p className={`text-3xl font-black relative z-10 tracking-tight ${labaBersih >= 0 ? 'text-teal-700' : 'text-red-600'}`}>

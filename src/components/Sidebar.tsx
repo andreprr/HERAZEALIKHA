@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { 
   LayoutDashboard, ReceiptText, CalendarDays, ArrowRightLeft,  
-  Users, WashingMachine, Library, Download, Upload, FileText, Settings,
+  Users, Wallet, Library, Download, Upload, FileText, Settings,
   Menu, X, ChevronLeft, ChevronRight, UserCircle, Banknote, ClipboardCheck, LogOut
 } from 'lucide-react';
 
@@ -16,7 +16,7 @@ const allMenuItems = [
   { path: '/transaksi', label: 'Transaksi', icon: ArrowRightLeft },
   { path: '/shift-kas', label: 'Shift Kas', icon: Banknote },
   { path: '/pelanggan', label: 'Pelanggan', icon: Users },
-  { path: '/perawatan', label: 'Perawatan', icon: WashingMachine },
+  { path: '/kas-keluar', label: 'Kas Keluar', icon: Wallet },
   { path: '/opname', label: 'Opname', icon: ClipboardCheck },
   { path: '/laporan', label: 'Laporan', icon: FileText },
   { path: '/katalog-barang', label: 'Katalog Barang', icon: Library }, 
@@ -27,7 +27,7 @@ const allMenuItems = [
 
 const kasirAllowedPaths = [
   '/dashboard', '/kasir', '/sewa', '/transaksi', '/shift-kas', 
-  '/pelanggan', '/perawatan', '/opname', '/laporan'
+  '/pelanggan', '/kas-keluar', '/opname', '/laporan'
 ];
 
 export default function Sidebar({ children }: { children: React.ReactNode }) {
@@ -100,12 +100,12 @@ export default function Sidebar({ children }: { children: React.ReactNode }) {
       >
         <div className="relative flex items-center justify-center py-5 px-4 shrink-0 border-b border-transparent min-h-[5rem]">
           <Link href="/dashboard" className={`flex items-center justify-center overflow-hidden transition-all duration-300 ${!isSidebarOpen && 'lg:opacity-0 lg:w-0 lg:h-0'}`}>
-            <img src="/gambar.png" alt="Logo Herazealikha" className="w-32 h-auto max-h-24 object-contain" />
+            <img src="/gambar.jpeg" alt="Logo Herazealikha" className="w-32 h-auto max-h-24 object-contain" />
           </Link>
           
           {!isSidebarOpen && (
             <div className="hidden lg:flex w-full justify-center">
-              <img src="/gambar.png" alt="Logo Herazealikha" className="w-10 h-auto max-h-10 object-contain" />
+              <img src="/gambar.jpeg" alt="Logo Herazealikha" className="w-10 h-auto max-h-10 object-contain" />
             </div>
           )}
 

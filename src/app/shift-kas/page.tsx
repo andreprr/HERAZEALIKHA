@@ -35,8 +35,6 @@ export default function ShiftKasPage() {
   // State untuk Tutup Shift
   const [uangFisikAktual, setUangFisikAktual] = useState(0); 
   const [uangSetoran, setUangSetoran] = useState(0);
-  const [closingFile, setClosingFile] = useState<File | null>(null);
-  const [closingPreview, setClosingPreview] = useState<string>('');
   const [isClosingSubmitting, setIsClosingSubmitting] = useState(false);
   
   const [schedules, setSchedules] = useState<any[]>(DEFAULT_SHIFTS);
@@ -128,38 +126,24 @@ export default function ShiftKasPage() {
     setIsModalBukaShiftOpen(false);
   };
 
-  // MENGUNGGAH BUKTI TUTUP SHIFT & MENGAKHIRI SHIFT
   const handleTutupShift = async () => {
-    if (!closingFile) {
-      return toast.error('Harap unggah bukti tutup shift (foto laci/struk) terlebih dahulu!');
-    }
-
     setIsClosingSubmitting(true);
     try {
-      const fileName = `tutup_shift_${Date.now()}.jpg`;
-      const { error: uploadError } = await supabase.storage
-        .from('bukti-transfer') // Simpan di bucket yang sama sementara waktu
-        .upload(fileName, closingFile, { cacheControl: '3600', upsert: true });
-
-      if (uploadError) throw uploadError;
-
+      // Modal shift depan adalah uang fisik aktual dikurangi uang yang disetorkan
       const modalShiftDepan = uangFisikAktual - uangSetoran;
       
       setIsShiftOpen(false);
       localStorage.setItem('herazealikha_shift_status', 'closed');
       localStorage.setItem('herazealikha_saldo_laci', modalShiftDepan.toString());
       
-      toast.success('Sesi Kasir berhasil ditutup! Laporan & bukti tersimpan.');
+      toast.success('Sesi Kasir berhasil ditutup! Saldo laci diteruskan ke shift selanjutnya.');
       setIsModalTutupShiftOpen(false);
       
-      // Reset form
-      setClosingFile(null);
-      setClosingPreview('');
       setUangFisikAktual(0);
       setUangSetoran(0);
     } catch (error: any) {
       console.error(error);
-      toast.error('Gagal mengunggah bukti tutup shift.');
+      toast.error('Gagal menutup shift.');
     } finally {
       setIsClosingSubmitting(false);
     }
@@ -171,7 +155,6 @@ export default function ShiftKasPage() {
     setIsModalJadwalOpen(false);
   };
 
-  // AUTO-COMPRESS GAMBAR UNTUK BUKTI PELANGGAN
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -191,7 +174,6 @@ export default function ShiftKasPage() {
           height = Math.round((height * MAX_WIDTH) / width);
           width = MAX_WIDTH;
         }
-
         canvas.width = width;
         canvas.height = height;
         const ctx = canvas.getContext('2d');
@@ -199,53 +181,9 @@ export default function ShiftKasPage() {
 
         canvas.toBlob((blob) => {
           if (!blob) return toast.error('Gagal mengompres gambar.');
-          const compressed = new File([blob], file.name.replace(/\.[^/.]+$/, "") + ".jpg", {
-            type: 'image/jpeg',
-            lastModified: Date.now(),
-          });
-
+          const compressed = new File([blob], file.name.replace(/\.[^/.]+$/, "") + ".jpg", { type: 'image/jpeg' });
           setCompressedFile(compressed);
           setPreviewImage(URL.createObjectURL(compressed));
-        }, 'image/jpeg', 0.7);
-      };
-    };
-  };
-
-  // AUTO-COMPRESS GAMBAR KHUSUS TUTUP SHIFT
-  const handleClosingFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = (event) => {
-      const img = document.createElement('img');
-      img.src = event.target?.result as string;
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        let width = img.width;
-        let height = img.height;
-
-        const MAX_WIDTH = 900;
-        if (width > MAX_WIDTH) {
-          height = Math.round((height * MAX_WIDTH) / width);
-          width = MAX_WIDTH;
-        }
-
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        ctx?.drawImage(img, 0, 0, width, height);
-
-        canvas.toBlob((blob) => {
-          if (!blob) return toast.error('Gagal mengompres gambar.');
-          const compressed = new File([blob], file.name.replace(/\.[^/.]+$/, "") + ".jpg", {
-            type: 'image/jpeg',
-            lastModified: Date.now(),
-          });
-
-          setClosingFile(compressed);
-          setClosingPreview(URL.createObjectURL(compressed));
         }, 'image/jpeg', 0.7);
       };
     };
@@ -305,6 +243,7 @@ export default function ShiftKasPage() {
     return itemTime >= activeShift.start && itemTime <= activeShift.end;
   });
 
+  // LOGIKA PENGHITUNGAN MIX PAYMENT (SPLIT METHOD)
   let uangKasMasuk = 0;
   let uangNonTunai = 0;
   const rincianMetode: Record<string, number> = {};
@@ -312,22 +251,45 @@ export default function ShiftKasPage() {
 
   filteredTransaksi.forEach(item => {
     let metode = item.metode_pembayaran || 'Tunai';
-    const nominal = item.dp || 0; 
-    
-    if (metode.toLowerCase().includes('transfer')) {
-      metode = 'Transfer';
-    }
-    
-    const isNonTunai = metode.toLowerCase() !== 'tunai' && metode.toLowerCase() !== 'cash';
 
-    if (!rincianMetode[metode]) rincianMetode[metode] = 0;
-    rincianMetode[metode] += nominal;
+    if (metode.startsWith('SPLIT|')) {
+      const parts = metode.split('|');
+      const metodeDP = parts[1];
+      const nominalDP = Number(parts[2]);
+      const metodeLunas = parts[3];
+      const nominalLunas = Number(parts[4]);
 
-    if (!isNonTunai) {
-      uangKasMasuk += nominal;
-    } else { 
-      uangNonTunai += nominal; 
-      listNonTunai.push(item); 
+      if (!rincianMetode[metodeDP]) rincianMetode[metodeDP] = 0;
+      rincianMetode[metodeDP] += nominalDP;
+      if (metodeDP.toLowerCase() === 'tunai') uangKasMasuk += nominalDP;
+      else uangNonTunai += nominalDP;
+
+      if (!rincianMetode[metodeLunas]) rincianMetode[metodeLunas] = 0;
+      rincianMetode[metodeLunas] += nominalLunas;
+      if (metodeLunas.toLowerCase() === 'tunai') uangKasMasuk += nominalLunas;
+      else uangNonTunai += nominalLunas;
+
+      if (metodeDP.toLowerCase() !== 'tunai' || metodeLunas.toLowerCase() !== 'tunai') {
+        listNonTunai.push({
+          ...item,
+          metode_pembayaran: `${metodeDP} & ${metodeLunas} (Mix)`
+        });
+      }
+    } else {
+      const nominal = item.dp || 0; 
+      if (metode.toLowerCase().includes('transfer')) metode = 'Transfer';
+      
+      const isNonTunai = metode.toLowerCase() !== 'tunai' && metode.toLowerCase() !== 'cash';
+
+      if (!rincianMetode[metode]) rincianMetode[metode] = 0;
+      rincianMetode[metode] += nominal;
+
+      if (!isNonTunai) {
+        uangKasMasuk += nominal;
+      } else { 
+        uangNonTunai += nominal; 
+        listNonTunai.push(item); 
+      }
     }
   });
 
@@ -558,9 +520,7 @@ export default function ShiftKasPage() {
         </div>
       )}
 
-      {/* ========================================= */}
-      {/* MODAL UPLOAD FILE BUKTI PEMBAYARAN        */}
-      {/* ========================================= */}
+      {/* MODAL UPLOAD FILE BUKTI PEMBAYARAN */}
       {selectedTransaksi && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
           <div className="bg-white w-full max-w-md rounded-2xl shadow-xl overflow-hidden flex flex-col">
@@ -576,7 +536,8 @@ export default function ShiftKasPage() {
               <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs space-y-1">
                 <div className="flex justify-between"><span className="text-slate-500">Invoice:</span><span className="font-bold">{selectedTransaksi.invoice}</span></div>
                 <div className="flex justify-between"><span className="text-slate-500">Pelanggan:</span><span className="font-bold">{selectedTransaksi.nama_penyewa}</span></div>
-                <div className="flex justify-between"><span className="text-slate-500">Nominal:</span><span className="font-bold text-green-600">Rp {(selectedTransaksi.dp || 0).toLocaleString('id-ID')}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Nominal Total:</span><span className="font-bold text-green-600">Rp {(selectedTransaksi.dp || 0).toLocaleString('id-ID')}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Metode Bayar:</span><span className="font-bold text-purple-700">{selectedTransaksi.metode_pembayaran}</span></div>
               </div>
 
               <div>
@@ -589,7 +550,6 @@ export default function ShiftKasPage() {
                   onChange={handleFileChange}
                   className="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100 cursor-pointer border border-purple-200 rounded-xl p-1 bg-slate-50"
                 />
-                <p className="text-[10px] text-slate-400 mt-1">Sistem otomatis mengompres ukuran gambar agar ringan disimpan.</p>
               </div>
 
               {previewImage && (
@@ -633,7 +593,15 @@ export default function ShiftKasPage() {
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Uang Modal Awal Laci (Rp)</label>
               <div className="relative">
                 <Wallet className="absolute left-3 top-3 text-purple-700" size={20} />
-                <input type="number" value={saldoAwal} onChange={(e) => setSaldoAwal(Number(e.target.value))} className="w-full bg-slate-50 border border-purple-200 text-slate-800 font-bold text-lg rounded-xl pl-10 pr-4 py-3 outline-none focus:border-purple-600 focus:ring-1 focus:ring-purple-600 transition-all" />
+                <input 
+                  type="text" 
+                  value={saldoAwal ? saldoAwal.toLocaleString('id-ID') : ''} 
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/\D/g, '');
+                    setSaldoAwal(Number(val));
+                  }} 
+                  className="w-full bg-slate-50 border border-purple-200 text-slate-800 font-bold text-lg rounded-xl pl-10 pr-4 py-3 outline-none focus:border-purple-600 focus:ring-1 focus:ring-purple-600 transition-all" 
+                />
               </div>
             </div>
             <div className="p-5 border-t border-purple-100 bg-slate-50">
@@ -643,7 +611,7 @@ export default function ShiftKasPage() {
         </div>
       )}
 
-      {/* MODAL TUTUP SHIFT DENGAN FITUR UPLOAD WAJIB */}
+      {/* MODAL TUTUP SHIFT (Tanpa Upload & Nominal Kas Dikunci) */}
       {isModalTutupShiftOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
           <div className="bg-white w-full max-w-md rounded-2xl shadow-xl overflow-hidden flex flex-col max-h-[95vh]">
@@ -670,55 +638,52 @@ export default function ShiftKasPage() {
               <div className="bg-purple-50/50 p-4 rounded-xl border border-purple-100 space-y-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-600 uppercase mb-1.5 flex items-center gap-1.5">
-                    <Wallet size={14} className="text-purple-700" /> 1. Uang Aktual Laci (Dihitung Fisik)
+                    <Wallet size={14} className="text-purple-700" /> 1. Uang Aktual Laci (Otomatis Sistem)
                   </label>
-                  <input type="number" value={uangFisikAktual} onChange={(e) => setUangFisikAktual(Number(e.target.value))} className="w-full bg-white border border-purple-200 text-slate-800 font-bold text-lg rounded-lg px-3 py-2 outline-none focus:border-purple-600" />
+                  {/* DIUBAH MENJADI TEXT BOX DISABLED/NON-EDITABLE */}
+                  <div className="w-full bg-slate-200/60 border border-slate-300 text-slate-600 font-bold text-lg rounded-lg px-3 py-2 cursor-not-allowed"> 
+                    Rp {uangFisikAktual ? uangFisikAktual.toLocaleString('id-ID') : '0'}
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-1 italic">*Nilai ini dikunci dan disesuaikan otomatis oleh sistem berdasarkan total uang fisik yang masuk.</p>
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-600 uppercase mb-1.5 flex items-center gap-1.5">
                     <ArrowUpFromLine size={14} className="text-purple-700" /> 2. Uang Disetorkan (Diambil dari Laci)
                   </label>
-                  <input type="number" value={uangSetoran} onChange={(e) => setUangSetoran(Number(e.target.value))} className="w-full bg-white border border-purple-200 text-slate-800 font-bold text-lg rounded-lg px-3 py-2 outline-none focus:border-purple-600" />
+                  <input 
+                    type="text" 
+                    value={uangSetoran ? uangSetoran.toLocaleString('id-ID') : ''} 
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, '');
+                      // Batasi agar tidak bisa setor melebihi uang fisik aktual
+                      if (Number(val) > uangFisikAktual) {
+                        setUangSetoran(uangFisikAktual);
+                      } else {
+                        setUangSetoran(Number(val));
+                      }
+                    }} 
+                    className="w-full bg-white border border-purple-200 text-slate-800 font-bold text-lg rounded-lg px-3 py-2 outline-none focus:border-purple-600 focus:ring-2 focus:ring-purple-200 transition-all" 
+                    placeholder="0"
+                  />
                 </div>
                 <div className="pt-2 border-t border-purple-200">
                   <label className="block text-xs font-bold text-slate-600 uppercase mb-1 flex items-center gap-1.5">
                     <ArrowDownToLine size={14} className="text-purple-700" /> 3. Modal Uang Kembalian Shift Depan
                   </label>
-                  <div className="bg-white px-3 py-2 rounded-lg border border-purple-200 font-black text-purple-700 text-lg">
+                  <div className="bg-white px-3 py-2 rounded-lg border border-purple-200 font-black text-purple-700 text-lg shadow-inner">
                     Rp {(uangFisikAktual - uangSetoran).toLocaleString('id-ID')}
                   </div>
                 </div>
-
-                {/* AREA UPLOAD WAJIB TUTUP SHIFT */}
-                <div className="pt-3 border-t border-purple-200">
-                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1.5 flex items-center gap-1.5">
-                    <Upload size={14} className="text-purple-700" /> 4. Upload Bukti Tutup Shift (Wajib)
-                  </label>
-                  <input 
-                    type="file" 
-                    accept="image/*"
-                    onChange={handleClosingFileChange}
-                    className="w-full text-[10px] text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-[10px] file:font-bold file:bg-purple-100 file:text-purple-700 hover:file:bg-purple-200 cursor-pointer border border-purple-200 rounded-xl p-1 bg-white"
-                  />
-                  <p className="text-[10px] text-red-500 mt-1 font-semibold italic">*Wajib foto fisik laci uang/struk untuk disetor.</p>
-                  
-                  {closingPreview && (
-                    <div className="mt-2 p-1.5 border border-purple-200 rounded-xl bg-white flex justify-center">
-                      <img src={closingPreview} alt="Preview Bukti Tutup" className="h-24 object-contain rounded-lg" />
-                    </div>
-                  )}
-                </div>
-
               </div>
             </div>
             <div className="p-4 border-t border-purple-100 bg-slate-50 flex gap-3 shrink-0">
               <button 
                 onClick={handleTutupShift} 
                 disabled={isClosingSubmitting}
-                className="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-3 rounded-xl text-sm transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                className="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-3 rounded-xl text-sm transition-colors disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm"
               >
                 {isClosingSubmitting ? <Loader2 size={18} className="animate-spin" /> : null}
-                {isClosingSubmitting ? 'Mengunggah Data...' : 'Akhiri & Mutasi'}
+                {isClosingSubmitting ? 'Menyimpan...' : 'Akhiri & Mutasi Kasir'}
               </button>
             </div>
           </div>
