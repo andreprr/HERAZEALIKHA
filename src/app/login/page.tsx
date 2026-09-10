@@ -38,10 +38,10 @@ export default function LoginPage() {
       localStorage.setItem('userId', user.id);
 
       toast.success(`Selamat datang, ${user.nama_lengkap}!`);
-      
+
       // Redirect ke dashboard
       router.push('/dashboard');
-      
+
     } catch (error: any) {
       toast.error('Terjadi kesalahan saat login.');
       setIsLoading(false);
@@ -50,7 +50,7 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 relative overflow-hidden">
-      
+
       {/* Background Ornamen */}
       <div className="absolute top-[-10%] left-[-10%] w-96 h-96 bg-purple-300 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob"></div>
       <div className="absolute top-[-10%] right-[-10%] w-96 h-96 bg-pink-300 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-2000"></div>
@@ -58,7 +58,7 @@ export default function LoginPage() {
 
       <div className="w-full max-w-md bg-white p-8 rounded-3xl shadow-2xl border border-purple-50 relative z-10 mx-4">
         <div className="flex flex-col items-center mb-8">
-          <img src="/gambar.png" alt="Logo Herazealikha" className="h-24 w-auto object-contain mb-4" />
+          <img src="/gambar.jpeg" alt="Logo Herazealikha" className="h-24 w-auto object-contain mb-4" />
           <h1 className="text-2xl font-black text-slate-800">Sistem Kasir & Inventaris</h1>
           <p className="text-sm text-slate-500 mt-1 font-medium">Silakan masuk ke akun Anda</p>
         </div>
@@ -68,8 +68,8 @@ export default function LoginPage() {
             <label className="block text-xs font-bold text-slate-600 uppercase mb-2 ml-1">Username</label>
             <div className="relative">
               <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-              <input 
-                type="text" 
+              <input
+                type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="Masukkan username"
@@ -82,8 +82,8 @@ export default function LoginPage() {
             <label className="block text-xs font-bold text-slate-600 uppercase mb-2 ml-1">Password</label>
             <div className="relative">
               <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-              <input 
-                type="password" 
+              <input
+                type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
@@ -92,8 +92,8 @@ export default function LoginPage() {
             </div>
           </div>
 
-          <button 
-            type="submit" 
+          <button
+            type="submit"
             disabled={isLoading}
             className="w-full h-12 bg-purple-700 hover:bg-purple-800 text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-all hover:shadow-lg hover:shadow-purple-700/30 disabled:opacity-70 disabled:cursor-not-allowed mt-2"
           >
@@ -101,7 +101,7 @@ export default function LoginPage() {
             {isLoading ? 'Memproses...' : 'Masuk Sistem'}
           </button>
         </form>
-        
+
         <p className="text-center text-xs text-slate-400 font-semibold mt-8">
           &copy; {new Date().getFullYear()} HERAZEALIKHA
         </p>
