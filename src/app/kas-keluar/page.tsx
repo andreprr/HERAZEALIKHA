@@ -250,11 +250,17 @@ export default function KasKeluarPage() {
                 <div className="relative">
                   <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-slate-400">Rp</span>
                   <input 
-                    type="number" min="1" required
+                    type="text" 
+                    inputMode="numeric"
+                    required
                     placeholder="0"
-                    value={formData.nominal}
-                    onChange={(e) => setFormData({...formData, nominal: e.target.value})}
-                    className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-300 rounded-xl text-lg font-black focus:ring-2 focus:ring-red-500 outline-none text-slate-800"
+                    value={formData.nominal ? Number(formData.nominal).toLocaleString('id-ID') : ''}
+                    onChange={(e) => {
+                      // Hanya mengambil karakter angka (membersihkan titik)
+                      const rawValue = e.target.value.replace(/\D/g, '');
+                      setFormData({...formData, nominal: rawValue});
+                    }}
+                    className="w-full pl-11 pr-4 py-2.5 bg-white border border-slate-300 rounded-xl text-lg font-black focus:ring-2 focus:ring-red-500 outline-none text-slate-800"
                   />
                 </div>
               </div>
