@@ -4,8 +4,8 @@ import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import toast from 'react-hot-toast';
-import { 
-  ArrowLeft, Save, User, Calendar, CreditCard, 
+import {
+  ArrowLeft, Save, User, Calendar, CreditCard,
   Loader2, ShieldCheck, Package, Plus, Minus, X, Search, Image as ImageIcon,
   CheckCircle, Upload
 } from 'lucide-react';
@@ -23,8 +23,8 @@ export default function EditSewaPage() {
   const [namaPenyewa, setNamaPenyewa] = useState('');
   const [noWa, setNoWa] = useState('');
   const [jenisJaminan, setJenisJaminan] = useState('KTP');
-  const [namaPenjamin, setNamaPenjamin] = useState(''); 
-  const [kelengkapan, setKelengkapan] = useState(''); 
+  const [namaPenjamin, setNamaPenjamin] = useState('');
+  const [kelengkapan, setKelengkapan] = useState('');
 
   // State Form Waktu
   const [tanggalBawa, setTanggalBawa] = useState('');
@@ -109,7 +109,7 @@ export default function EditSewaPage() {
         setNamaPenyewa(sewa.nama_penyewa || '');
         setNoWa(sewa.no_wa || '');
         setJenisJaminan(sewa.jenis_jaminan || 'KTP');
-        setNamaPenjamin(sewa.nomor_jaminan || ''); 
+        setNamaPenjamin(sewa.nomor_jaminan || '');
         setKelengkapan(sewa.kelengkapan || '');
 
         setTanggalBawa(sewa.tanggal_bawa ? sewa.tanggal_bawa.split(' ')[0] : '');
@@ -139,7 +139,7 @@ export default function EditSewaPage() {
 
   const totalHarga = items.reduce((sum, item) => sum + (item.harga * item.qty), 0);
   const sisaBayar = totalHarga - (Number(dp) || 0);
-  
+
   const addToCart = (barang: any) => {
     const existing = items.find(item => item.id === barang.id);
     if (existing) {
@@ -153,7 +153,7 @@ export default function EditSewaPage() {
   const updateQty = (barangId: string, delta: number) => {
     const item = items.find(i => i.id === barangId);
     if (!item) return;
-    
+
     const newQty = item.qty + delta;
     if (newQty <= 0) {
       setItems(items.filter(i => i.id !== barangId));
@@ -162,7 +162,7 @@ export default function EditSewaPage() {
     setItems(items.map(i => i.id === barangId ? { ...i, qty: newQty } : i));
   };
 
-  const filteredKatalog = katalog.filter(item => 
+  const filteredKatalog = katalog.filter(item =>
     item.nama_barang.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
@@ -201,12 +201,11 @@ export default function EditSewaPage() {
     };
   };
 
-  // 🔴 Handle Submit Pelunasan (DENGAN LOGIKA MIX PAYMENT)
   const handleProsesPelunasan = async () => {
     setIsProcessingPelunasan(true);
     try {
       let buktiUrl = undefined;
-      
+
       if (pelunasanFile) {
         const fileName = `pelunasan_${invoice}_${Date.now()}.jpg`;
         const { error: uploadError } = await supabase.storage
@@ -218,32 +217,30 @@ export default function EditSewaPage() {
         const { data: urlData } = supabase.storage.from('bukti-transfer').getPublicUrl(fileName);
         buktiUrl = urlData.publicUrl;
       }
-      
-      // LOGIKA PENYIMPANAN MIX PAYMENT (TUNAI + TRANSFER / BEDA METODE)
+
       let finalMetode = pelunasanMetode;
       if (Number(dp) > 0 && metodePembayaran !== pelunasanMetode && !metodePembayaran.startsWith('SPLIT|')) {
-        // Gabungkan menjadi teks rahasia: SPLIT|MetodeAwal|NominalAwal|MetodeLunas|NominalLunas
         finalMetode = `SPLIT|${metodePembayaran}|${dp}|${pelunasanMetode}|${sisaBayar}`;
       }
 
       const payload: any = {
-        dp: totalHarga, 
+        dp: totalHarga,
         metode_pembayaran: finalMetode,
         status_pembayaran: 'diterima'
       };
-      
+
       if (buktiUrl) payload.bukti_pembayaran = buktiUrl;
 
       const { error } = await supabase.from('sewa').update(payload).eq('id', id);
       if (error) throw error;
-      
+
       setDp(totalHarga);
       setMetodePembayaran(finalMetode);
       setIsPelunasanOpen(false);
       setPelunasanFile(null);
       setPelunasanPreview('');
       toast.success('Pelunasan berhasil diproses!');
-    } catch(err) {
+    } catch (err) {
       toast.error('Gagal memproses pelunasan');
     } finally {
       setIsProcessingPelunasan(false);
@@ -265,7 +262,7 @@ export default function EditSewaPage() {
           nama_penyewa: namaPenyewa,
           no_wa: noWa,
           jenis_jaminan: jenisJaminan,
-          nomor_jaminan: namaPenjamin, 
+          nomor_jaminan: namaPenjamin,
           kelengkapan: kelengkapan,
           tanggal_bawa: tanggalBawa,
           tanggal_kembali: tanggalKembali,
@@ -278,14 +275,14 @@ export default function EditSewaPage() {
       if (updateSewaError) throw updateSewaError;
 
       await supabase.from('sewa_items').delete().eq('sewa_id', id);
-      
+
       const newSewaItems = items.map(item => ({
         sewa_id: id,
         barang_id: item.id,
         qty: item.qty,
         harga: item.harga
       }));
-      
+
       const { error: insertItemsError } = await supabase.from('sewa_items').insert(newSewaItems);
       if (insertItemsError) throw insertItemsError;
 
@@ -309,7 +306,7 @@ export default function EditSewaPage() {
 
   return (
     <div className="flex flex-col gap-6 min-h-screen pb-24 pt-2 w-full max-w-4xl mx-auto bg-white relative">
-      
+
       <div className="flex items-center gap-4 w-full bg-white p-5 rounded-2xl shadow-sm border border-purple-200">
         <button onClick={() => router.back()} className="p-2.5 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-xl transition-colors border border-slate-200">
           <ArrowLeft size={18} />
@@ -321,7 +318,7 @@ export default function EditSewaPage() {
       </div>
 
       <form onSubmit={handleUpdate} className="space-y-6">
-        
+
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-purple-200">
           <h3 className="font-bold text-slate-800 flex items-center gap-2 border-b border-purple-100 pb-3 mb-4">
             <User size={18} className="text-purple-600" /> Informasi Pelanggan
@@ -329,7 +326,7 @@ export default function EditSewaPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1">Nama Penyewa</label>
-              <input 
+              <input
                 type="text" value={namaPenyewa} onChange={(e) => setNamaPenyewa(e.target.value)}
                 className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-purple-500 focus:outline-none text-sm font-semibold text-slate-800 transition-colors"
                 required
@@ -337,7 +334,7 @@ export default function EditSewaPage() {
             </div>
             <div>
               <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1">No. WhatsApp</label>
-              <input 
+              <input
                 type="text" value={noWa} onChange={(e) => setNoWa(e.target.value)}
                 className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-purple-500 focus:outline-none text-sm font-semibold text-slate-800 transition-colors"
               />
@@ -346,8 +343,8 @@ export default function EditSewaPage() {
               <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
                 <ShieldCheck size={14} className="text-purple-600" /> Jenis Jaminan
               </label>
-              <select 
-                value={jenisJaminan} 
+              <select
+                value={jenisJaminan}
                 onChange={(e) => {
                   setJenisJaminan(e.target.value);
                   setNamaPenjamin('');
@@ -359,7 +356,7 @@ export default function EditSewaPage() {
                 <option value="Deposit">Deposit</option>
               </select>
             </div>
-            
+
             <div>
               <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1">
                 {jenisJaminan === 'Deposit' ? 'Nominal Deposit' : 'Nama Pemilik Jaminan'}
@@ -367,11 +364,11 @@ export default function EditSewaPage() {
               {jenisJaminan === 'Deposit' ? (
                 <div className="relative">
                   <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-400">Rp</span>
-                  <input 
-                    type="text" 
-                    value={namaPenjamin ? Number(namaPenjamin.replace(/\D/g, '')).toLocaleString('id-ID') : ''} 
+                  <input
+                    type="text"
+                    value={namaPenjamin ? Number(namaPenjamin.replace(/\D/g, '')).toLocaleString('id-ID') : ''}
                     onChange={(e) => {
-                      const val = e.target.value.replace(/\D/g, ''); 
+                      const val = e.target.value.replace(/\D/g, '');
                       setNamaPenjamin(val);
                     }}
                     placeholder="Contoh: 50.000"
@@ -379,9 +376,9 @@ export default function EditSewaPage() {
                   />
                 </div>
               ) : (
-                <input 
-                  type="text" 
-                  value={namaPenjamin} 
+                <input
+                  type="text"
+                  value={namaPenjamin}
                   onChange={(e) => setNamaPenjamin(e.target.value)}
                   placeholder={`Nama di ${jenisJaminan}...`}
                   className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-purple-500 focus:outline-none text-sm font-semibold text-slate-800 transition-colors"
@@ -398,7 +395,7 @@ export default function EditSewaPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div className="space-y-1">
               <label className="block text-[11px] font-bold text-slate-500 uppercase">Tanggal Ambil</label>
-              <input 
+              <input
                 type="date" value={tanggalBawa} onChange={(e) => setTanggalBawa(e.target.value)}
                 className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-purple-500 focus:outline-none text-sm font-semibold text-slate-800"
                 required
@@ -406,19 +403,24 @@ export default function EditSewaPage() {
             </div>
             <div className="space-y-1">
               <label className="block text-[11px] font-bold text-slate-500 uppercase text-red-500">Batas Kembali</label>
-              <input 
+              <input
                 type="date" value={tanggalKembali} onChange={(e) => setTanggalKembali(e.target.value)}
                 className="w-full px-4 py-2.5 rounded-xl border border-red-200 bg-red-50 focus:bg-white focus:border-red-500 focus:outline-none text-sm font-semibold text-red-700"
                 required
               />
             </div>
           </div>
+
           <div>
-            <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1">Kelengkapan / Aksesoris Manual</label>
-            <input 
-              type="text" value={kelengkapan} onChange={(e) => setKelengkapan(e.target.value)}
-              placeholder="Contoh: Dasi 1, Sabuk 1, Peniti..."
-              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-purple-500 focus:outline-none text-sm font-semibold text-slate-800 transition-colors"
+            <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1">
+              Kelengkapan / Aksesoris Manual <span className="normal-case text-slate-400 font-normal">(Tekan Enter untuk baris baru vertikal)</span>
+            </label>
+            <textarea
+              rows={4}
+              value={kelengkapan}
+              onChange={(e) => setKelengkapan(e.target.value)}
+              placeholder="Contoh:&#10;- Dasi 1 pcs&#10;- Sabuk 1 pcs&#10;- Peniti hias"
+              className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-purple-500 focus:outline-none text-sm font-semibold text-slate-800 transition-colors leading-relaxed"
             />
           </div>
         </div>
@@ -428,8 +430,8 @@ export default function EditSewaPage() {
             <h3 className="font-bold text-slate-800 flex items-center gap-2">
               <Package size={18} className="text-purple-600" /> Daftar Barang
             </h3>
-            <button 
-              type="button" 
+            <button
+              type="button"
               onClick={() => setIsModalOpen(true)}
               className="bg-purple-100 hover:bg-purple-200 text-purple-700 text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors"
             >
@@ -447,11 +449,11 @@ export default function EditSewaPage() {
                 <div key={item.id} className="flex items-center justify-between gap-3 bg-slate-50 p-3 rounded-xl border border-slate-100 shadow-sm">
                   <div className="flex items-center gap-3">
                     <div className="w-12 h-12 bg-white rounded-lg overflow-hidden border border-slate-200 shrink-0 flex items-center justify-center">
-                       {item.gambar_url ? (
-                         <img src={item.gambar_url} alt={item.nama_barang} className="w-full h-full object-cover" />
-                       ) : (
-                         <ImageIcon className="text-slate-300" size={16} />
-                       )}
+                      {item.gambar_url ? (
+                        <img src={item.gambar_url} alt={item.nama_barang} className="w-full h-full object-cover" />
+                      ) : (
+                        <ImageIcon className="text-slate-300" size={16} />
+                      )}
                     </div>
                     <div>
                       <h4 className="font-bold text-sm text-slate-800">{item.nama_barang}</h4>
@@ -459,9 +461,9 @@ export default function EditSewaPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0 bg-white border border-slate-200 rounded-lg p-1">
-                    <button type="button" onClick={() => updateQty(item.id, -1)} className="w-6 h-6 flex items-center justify-center bg-slate-100 hover:bg-purple-100 text-slate-600 rounded-md"><Minus size={12}/></button>
+                    <button type="button" onClick={() => updateQty(item.id, -1)} className="w-6 h-6 flex items-center justify-center bg-slate-100 hover:bg-purple-100 text-slate-600 rounded-md"><Minus size={12} /></button>
                     <span className="w-6 text-center text-xs font-bold">{item.qty}</span>
-                    <button type="button" onClick={() => updateQty(item.id, 1)} className="w-6 h-6 flex items-center justify-center bg-slate-100 hover:bg-purple-100 text-slate-600 rounded-md"><Plus size={12}/></button>
+                    <button type="button" onClick={() => updateQty(item.id, 1)} className="w-6 h-6 flex items-center justify-center bg-slate-100 hover:bg-purple-100 text-slate-600 rounded-md"><Plus size={12} /></button>
                   </div>
                 </div>
               ))}
@@ -475,8 +477,8 @@ export default function EditSewaPage() {
               <CreditCard size={18} className="text-purple-600" /> Finansial & Pembayaran
             </h3>
             {sisaBayar > 0 && (
-              <button 
-                type="button" 
+              <button
+                type="button"
                 onClick={() => setIsPelunasanOpen(true)}
                 className="bg-green-100 hover:bg-green-200 text-green-700 text-xs font-bold px-4 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors shadow-sm"
               >
@@ -484,7 +486,7 @@ export default function EditSewaPage() {
               </button>
             )}
           </div>
-          
+
           <div className="flex items-center justify-between bg-purple-50 p-4 rounded-xl border border-purple-100 mb-4">
             <span className="text-slate-600 font-bold text-sm">Total Tagihan Baru</span>
             <span className="text-xl font-black text-purple-800">Rp {totalHarga.toLocaleString('id-ID')}</span>
@@ -495,11 +497,11 @@ export default function EditSewaPage() {
               <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1">Sudah Dibayar (DP / Lunas)</label>
               <div className="relative">
                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-400">Rp</span>
-                <input 
-                  type="text" 
-                  value={dp ? Number(dp).toLocaleString('id-ID') : ''} 
+                <input
+                  type="text"
+                  value={dp ? Number(dp).toLocaleString('id-ID') : ''}
                   onChange={(e) => {
-                    const val = e.target.value.replace(/\D/g, ''); 
+                    const val = e.target.value.replace(/\D/g, '');
                     setDp(val ? Number(val) : '');
                   }}
                   className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-purple-500 focus:outline-none text-sm font-semibold text-slate-800"
@@ -508,11 +510,10 @@ export default function EditSewaPage() {
             </div>
             <div>
               <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1">Metode Bayar (Awal)</label>
-              <select 
+              <select
                 value={metodePembayaran} onChange={(e) => setMetodePembayaran(e.target.value)}
                 className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-purple-500 focus:outline-none text-sm font-semibold text-slate-800"
               >
-                {/* 🔴 Mencegah error tampilan jika metode sudah berupa teks Mix Payment */}
                 {metodePembayaran.startsWith('SPLIT|') && (
                   <option value={metodePembayaran}>
                     {metodePembayaran.split('|')[1]} & {metodePembayaran.split('|')[3]} (Mix)
@@ -524,7 +525,7 @@ export default function EditSewaPage() {
               </select>
             </div>
           </div>
-          
+
           {sisaBayar > 0 && (
             <div className="mt-4 flex items-center justify-between bg-red-50 p-3 rounded-xl border border-red-100">
               <span className="text-red-600 font-bold text-sm">Sisa Belum Dibayar</span>
@@ -534,15 +535,15 @@ export default function EditSewaPage() {
         </div>
 
         <div className="flex justify-end gap-3 pt-2">
-          <button 
-            type="button" 
+          <button
+            type="button"
             onClick={() => router.back()}
             className="px-6 py-3 rounded-xl font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
           >
             Batal
           </button>
-          <button 
-            type="submit" 
+          <button
+            type="submit"
             disabled={isSubmitting}
             className="px-6 py-3 rounded-xl font-bold text-white bg-purple-700 hover:bg-purple-800 transition-colors flex items-center gap-2 shadow-sm"
           >
@@ -564,7 +565,7 @@ export default function EditSewaPage() {
                 <X size={20} />
               </button>
             </div>
-            
+
             <div className="p-5 space-y-4">
               <div className="flex justify-between text-sm font-bold text-slate-600">
                 <span>Total Tagihan:</span>
@@ -581,9 +582,9 @@ export default function EditSewaPage() {
 
               <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Metode Pelunasan</label>
-                <select 
-                  value={pelunasanMetode} 
-                  onChange={e => setPelunasanMetode(e.target.value)} 
+                <select
+                  value={pelunasanMetode}
+                  onChange={e => setPelunasanMetode(e.target.value)}
                   className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-green-500 focus:outline-none text-sm font-bold text-slate-800"
                 >
                   <option value="Tunai">Tunai</option>
@@ -597,8 +598,8 @@ export default function EditSewaPage() {
                   <label className="block text-xs font-bold text-slate-500 uppercase mb-2 flex items-center gap-1">
                     <Upload size={14} className="text-green-600" /> Upload Bukti Pelunasan <span className="text-green-600 normal-case">(Wajib)</span>
                   </label>
-                  <input 
-                    type="file" 
+                  <input
+                    type="file"
                     accept="image/*"
                     onChange={handleFileChangePelunasan}
                     className="w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-green-50 file:text-green-700 hover:file:bg-green-100 cursor-pointer border border-slate-200 rounded-xl p-1 bg-slate-50"
@@ -606,7 +607,7 @@ export default function EditSewaPage() {
                   {pelunasanPreview && (
                     <div className="mt-3 p-2 border border-slate-200 rounded-xl bg-slate-50 flex justify-center h-32 relative">
                       <img src={pelunasanPreview} alt="Preview Bukti" className="h-full object-contain rounded-lg" />
-                      <button onClick={() => { setPelunasanFile(null); setPelunasanPreview(''); }} className="absolute top-1 right-1 bg-white/80 p-1 rounded-md text-red-500 hover:text-red-700 shadow-sm"><X size={14}/></button>
+                      <button onClick={() => { setPelunasanFile(null); setPelunasanPreview(''); }} className="absolute top-1 right-1 bg-white/80 p-1 rounded-md text-red-500 hover:text-red-700 shadow-sm"><X size={14} /></button>
                     </div>
                   )}
                 </div>
@@ -615,8 +616,8 @@ export default function EditSewaPage() {
 
             <div className="p-4 border-t border-slate-100 bg-slate-50 flex gap-3">
               <button onClick={() => setIsPelunasanOpen(false)} className="flex-1 py-3 rounded-xl font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-100 transition-colors">Batal</button>
-              <button 
-                onClick={handleProsesPelunasan} 
+              <button
+                onClick={handleProsesPelunasan}
                 disabled={isProcessingPelunasan || (pelunasanMetode !== 'Tunai' && !pelunasanFile)}
                 className="flex-1 py-3 rounded-xl font-bold text-white bg-green-600 hover:bg-green-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm"
               >
@@ -631,7 +632,7 @@ export default function EditSewaPage() {
       {isModalOpen && (
         <div className="fixed inset-0 z-40 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-3xl max-h-[85vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200">
-            
+
             <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
               <h3 className="font-bold text-slate-800 flex items-center gap-2">
                 <Package className="text-purple-600" /> Katalog Barang
@@ -644,7 +645,7 @@ export default function EditSewaPage() {
             <div className="p-4 border-b border-slate-100">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                <input 
+                <input
                   type="text" placeholder="Cari nama barang..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 focus:border-purple-500 outline-none text-sm"
                   autoFocus
@@ -658,15 +659,15 @@ export default function EditSewaPage() {
               ) : (
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                   {filteredKatalog.map(item => {
-                     const imageUrl = item.gambar_url || item.foto || item.foto_barang || item.image_url || item['katalog-foto'] || item.katalog_foto;
-                     let finalImageUrl = null;
-                     if (imageUrl) {
-                       if (imageUrl.startsWith('http')) finalImageUrl = imageUrl;
-                       else finalImageUrl = supabase.storage.from('katalog-foto').getPublicUrl(imageUrl).data.publicUrl;
-                     }
+                    const imageUrl = item.gambar_url || item.foto || item.foto_barang || item.image_url || item['katalog-foto'] || item.katalog_foto;
+                    let finalImageUrl = null;
+                    if (imageUrl) {
+                      if (imageUrl.startsWith('http')) finalImageUrl = imageUrl;
+                      else finalImageUrl = supabase.storage.from('katalog-foto').getPublicUrl(imageUrl).data.publicUrl;
+                    }
 
-                     return (
-                      <div 
+                    return (
+                      <div
                         key={item.id} onClick={() => addToCart(item)}
                         className="bg-white border border-slate-200 rounded-xl cursor-pointer hover:border-purple-400 hover:shadow-md transition-all flex flex-col overflow-hidden group select-none pb-2"
                       >

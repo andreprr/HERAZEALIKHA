@@ -4,8 +4,8 @@ import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import toast from 'react-hot-toast';
-import { 
-  ArrowLeft, MessageCircle, FileText, User, 
+import {
+  ArrowLeft, MessageCircle, FileText, User,
   Calendar, ShoppingBag, CreditCard, Loader2, Printer, CheckCircle,
   PackageOpen, Upload, X
 } from 'lucide-react';
@@ -22,9 +22,9 @@ export default function DetailSewaPage() {
   // State Pengembalian
   const [showReturnModal, setShowReturnModal] = useState(false);
   const [returnItems, setReturnItems] = useState<any[]>([]);
-  const [isKelengkapanSesuai, setIsKelengkapanSesuai] = useState(false); 
+  const [isKelengkapanSesuai, setIsKelengkapanSesuai] = useState(false);
   const [isReturning, setIsReturning] = useState(false);
-  
+
   const [isUploadingBukti, setIsUploadingBukti] = useState(false);
 
   // 🔴 STATE MODAL PELUNASAN
@@ -91,17 +91,17 @@ export default function DetailSewaPage() {
     if (!dateString) return '-';
     let cleanStr = dateString.trim().replace('T', ' ');
     if (cleanStr.length > 16) cleanStr = cleanStr.substring(0, 16);
-    
+
     if (cleanStr.length === 10) {
       const [y, m, d] = cleanStr.split('-');
       const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
-      return `${parseInt(d)} ${months[parseInt(m)-1]} ${y}`;
+      return `${parseInt(d)} ${months[parseInt(m) - 1]} ${y}`;
     }
 
     const [datePart, timePart] = cleanStr.split(' ');
     const [y, m, d] = datePart.split('-');
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
-    return `${parseInt(d)} ${months[parseInt(m)-1]} ${y}, ${timePart} WIB`;
+    return `${parseInt(d)} ${months[parseInt(m) - 1]} ${y}, ${timePart} WIB`;
   };
 
   // UPLOAD BUKTI (MANUAL)
@@ -138,7 +138,7 @@ export default function DetailSewaPage() {
       if (updateError) throw updateError;
 
       toast.success('Bukti pembayaran baru berhasil ditambahkan!');
-      fetchDetail(); 
+      fetchDetail();
     } catch (error: any) {
       toast.error('Gagal mengunggah bukti: ' + error.message);
     } finally {
@@ -149,14 +149,14 @@ export default function DetailSewaPage() {
   const handleOpenReturnModal = () => {
     const method = (sewa.metode_pembayaran || '').toLowerCase();
     const isCash = method.includes('cash') || method.includes('tunai');
-    
+
     if (!isCash && !sewa.bukti_pembayaran) {
       toast.error('Harap unggah bukti pembayaran Transfer/QRIS terlebih dahulu!', { duration: 4000 });
       return;
     }
 
     const initialReturnData = items.map(item => ({
-      ...item, kondisi: 'siap_sewa' 
+      ...item, kondisi: 'siap_sewa'
     }));
     setReturnItems(initialReturnData);
     setIsKelengkapanSesuai(false);
@@ -191,8 +191,8 @@ export default function DetailSewaPage() {
         const newDisewaCount = Math.max(0, currentDisewaCount - qty);
         const newStok = kondisi === 'siap_sewa' ? currentStok + qty : currentStok;
 
-        await supabase.from('katalog_barang').update({ 
-          stok: newStok, disewa_count: newDisewaCount 
+        await supabase.from('katalog_barang').update({
+          stok: newStok, disewa_count: newDisewaCount
         }).eq('id', barangId);
 
         if (kondisi !== 'siap_sewa') {
@@ -204,7 +204,7 @@ export default function DetailSewaPage() {
 
       toast.success('Pengembalian berhasil diproses!');
       setShowReturnModal(false);
-      fetchDetail(); 
+      fetchDetail();
 
     } catch (error) {
       toast.error('Gagal memproses pengembalian barang.');
@@ -254,7 +254,7 @@ export default function DetailSewaPage() {
     setIsProcessingPelunasan(true);
     try {
       let buktiUrl = undefined;
-      
+
       // Upload Bukti (jika Transfer/QRIS)
       if (pelunasanFile) {
         const fileName = `pelunasan_${sewa.invoice}_${Date.now()}.jpg`;
@@ -267,10 +267,10 @@ export default function DetailSewaPage() {
         const { data: urlData } = supabase.storage.from('bukti-transfer').getPublicUrl(fileName);
         buktiUrl = urlData.publicUrl;
       }
-      
+
       const dpCurrent = Number(sewa.dp) || 0;
       const sisa = (Number(sewa.total_harga) || 0) - dpCurrent;
-      
+
       // LOGIKA MIX PAYMENT (Jika metode awal beda dengan metode lunas)
       let finalMetode = pelunasanMetode;
       if (dpCurrent > 0 && sewa.metode_pembayaran !== pelunasanMetode && !(sewa.metode_pembayaran || '').startsWith('SPLIT|')) {
@@ -286,33 +286,33 @@ export default function DetailSewaPage() {
       }
 
       const payload: any = {
-        dp: sewa.total_harga, 
+        dp: sewa.total_harga,
         metode_pembayaran: finalMetode,
         status_pembayaran: 'diterima'
       };
-      
+
       if (buktiUrl) payload.bukti_pembayaran = finalBuktiUrl;
 
       const { error } = await supabase.from('sewa').update(payload).eq('id', id);
       if (error) throw error;
-      
+
       toast.success('Pelunasan berhasil diproses!');
       setShowPelunasanModal(false);
       setPelunasanFile(null);
       setPelunasanPreview('');
       fetchDetail();
-    } catch(err) {
+    } catch (err) {
       toast.error('Gagal memproses pelunasan');
     } finally {
       setIsProcessingPelunasan(false);
     }
   };
 
-  const handleKirimWA = () => { 
+  const handleKirimWA = () => {
     let phone = sewa.no_wa.replace(/\D/g, '');
     if (phone.startsWith('0')) phone = '62' + phone.substring(1);
-    
-    const itemList = items.map(item => 
+
+    const itemList = items.map(item =>
       `- ${item.katalog_barang?.nama_barang} (${item.qty}x) : Rp ${(item.harga * item.qty).toLocaleString('id-ID')}`
     ).join('\n');
 
@@ -352,7 +352,7 @@ Terima kasih telah mempercayakan sewa di HERAZEALIKHA!`;
   const total = sewa.total_harga || 0;
   const dp = sewa.dp || 0;
   const sisa = total - dp;
-  
+
   // Deteksi tampilan jika mix payment di rincian
   let displayMetode = sewa.metode_pembayaran;
   if ((displayMetode || '').startsWith('SPLIT|')) {
@@ -362,12 +362,12 @@ Terima kasih telah mempercayakan sewa di HERAZEALIKHA!`;
 
   const isMethodRequiresProof = sewa.metode_pembayaran && !sewa.metode_pembayaran.toLowerCase().includes('cash') && !sewa.metode_pembayaran.toLowerCase().includes('tunai') && !(sewa.metode_pembayaran || '').startsWith('SPLIT|');
   const buktiArray = sewa.bukti_pembayaran ? sewa.bukti_pembayaran.split(',') : [];
-  
+
   const lateStatus = isTerlambat(sewa.tanggal_kembali, sewa.status);
   const displayStatus = lateStatus ? 'TERLAMBAT' : sewa.status;
   const statusColor = sewa.status === 'selesai' ? 'bg-green-100 text-green-700' :
-                      lateStatus ? 'bg-red-100 text-red-700 border border-red-200' :
-                      sewa.status === 'dibawa' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700';
+    lateStatus ? 'bg-red-100 text-red-700 border border-red-200' :
+      sewa.status === 'dibawa' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700';
 
   return (
     <>
@@ -390,7 +390,7 @@ Terima kasih telah mempercayakan sewa di HERAZEALIKHA!`;
 
       {/* TAMPILAN WEB */}
       <div className="flex flex-col gap-6 min-h-screen pb-24 pt-2 w-full max-w-4xl mx-auto bg-white print:hidden">
-        
+
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full bg-white p-5 rounded-2xl shadow-sm border border-purple-200">
           <div className="flex items-center gap-4">
             <button onClick={() => router.push('/sewa')} className="p-2.5 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-xl transition-colors border border-slate-200">
@@ -484,18 +484,18 @@ Terima kasih telah mempercayakan sewa di HERAZEALIKHA!`;
               <span className="font-bold text-slate-800">Sisa Tagihan</span>
               <span className={`text-lg font-black ${sisa > 0 ? 'text-red-600' : 'text-green-600'}`}>{sisa > 0 ? `Rp ${sisa.toLocaleString('id-ID')}` : 'LUNAS'}</span>
             </div>
-            
+
             {/* FITUR UPLOAD BUKTI (FALLBACK) */}
             {isMethodRequiresProof && (
               <div className="pt-4 mt-3 border-t border-dashed border-purple-200">
                 <span className="block font-bold text-slate-800 mb-2">Bukti Pembayaran</span>
-                
+
                 {buktiArray.length > 0 && (
                   <div className="flex gap-3 overflow-x-auto mb-3 pb-2">
                     {buktiArray.map((url: string, idx: number) => (
                       <div key={idx} className="relative group shrink-0">
                         <a href={url} target="_blank" rel="noreferrer">
-                          <img src={url} alt={`Bukti ${idx+1}`} className="w-24 h-24 object-cover rounded-xl border border-slate-200 hover:opacity-90 transition-opacity" />
+                          <img src={url} alt={`Bukti ${idx + 1}`} className="w-24 h-24 object-cover rounded-xl border border-slate-200 hover:opacity-90 transition-opacity" />
                         </a>
                         <span className="absolute bottom-1 left-1 bg-black/70 text-white text-[9px] px-1.5 py-0.5 rounded-md font-bold">
                           {idx === 0 ? 'Bukti Awal' : `Tambahan ${idx}`}
@@ -520,8 +520,8 @@ Terima kasih telah mempercayakan sewa di HERAZEALIKHA!`;
             {/* 🔴 TOMBOL PELUNASAN (MEMANGGIL MODAL) */}
             {sisa > 0 && (
               <div className="pt-4">
-                <button 
-                  onClick={() => setShowPelunasanModal(true)} 
+                <button
+                  onClick={() => setShowPelunasanModal(true)}
                   className="w-full flex items-center justify-center gap-2 bg-slate-100 hover:bg-green-100 text-slate-700 hover:text-green-700 font-bold py-3 rounded-xl transition-all shadow-sm text-sm border border-slate-200 hover:border-green-300"
                 >
                   <CheckCircle size={18} /> Konfirmasi Pelunasan
@@ -534,7 +534,7 @@ Terima kasih telah mempercayakan sewa di HERAZEALIKHA!`;
         {/* TOMBOL PENGEMBALIAN */}
         {(sewa.status === 'dibawa' || lateStatus) && (
           <div className="mt-8 border-t border-purple-100 pt-8 flex justify-end">
-            <button 
+            <button
               onClick={handleOpenReturnModal}
               className="flex items-center gap-2 bg-pink-600 hover:bg-pink-700 text-white font-bold py-4 px-8 rounded-2xl shadow-lg hover:shadow-xl transition-all hover:-translate-y-1"
             >
@@ -548,9 +548,9 @@ Terima kasih telah mempercayakan sewa di HERAZEALIKHA!`;
       {/* STRUK THERMAL */}
       <div id="thermal-receipt" className="hidden print:block text-black p-2 bg-white">
         <div className="text-center mb-4">
-          <img src="/logo.jpeg" alt="Logo" className="w-16 mx-auto mb-1 grayscale" style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as React.CSSProperties} />
+          <img src="/gambar.jpeg" alt="Logo" className="w-16 mx-auto mb-1 grayscale" style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as React.CSSProperties} />
           <h1 className="text-lg font-black tracking-widest">HERAZEALIKHA</h1>
-          <p className="text-[10px]">Jl. Purwo Km.11 GG.Koramil, Delitua<br/>Medan</p>
+          <p className="text-[10px]">Jl. Purwo Km.11 GG.Koramil, Delitua<br />Medan</p>
           <p className="text-[10px] mt-1">Invoice: {sewa.invoice}</p>
         </div>
 
@@ -605,11 +605,11 @@ Terima kasih telah mempercayakan sewa di HERAZEALIKHA!`;
               ))}
             </tbody>
           </table>
-          
+
           {sewa.kelengkapan && (
-             <p className="mt-2 pt-2 border-t border-dotted border-black text-[10px]">
-               <span className="font-bold">Kelengkapan Manual:</span> {sewa.kelengkapan}
-             </p>
+            <p className="mt-2 pt-2 border-t border-dotted border-black text-[10px]">
+              <span className="font-bold">Kelengkapan Manual:</span> {sewa.kelengkapan}
+            </p>
           )}
         </div>
 
@@ -655,7 +655,7 @@ Terima kasih telah mempercayakan sewa di HERAZEALIKHA!`;
                 <X size={20} />
               </button>
             </div>
-            
+
             <div className="p-5 space-y-4">
               <div className="flex justify-between text-sm font-bold text-slate-600">
                 <span>Total Tagihan:</span>
@@ -672,9 +672,9 @@ Terima kasih telah mempercayakan sewa di HERAZEALIKHA!`;
 
               <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Pilih Metode Pelunasan</label>
-                <select 
-                  value={pelunasanMetode} 
-                  onChange={e => setPelunasanMetode(e.target.value)} 
+                <select
+                  value={pelunasanMetode}
+                  onChange={e => setPelunasanMetode(e.target.value)}
                   className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-green-500 focus:outline-none text-sm font-bold text-slate-800"
                 >
                   <option value="Tunai">Tunai</option>
@@ -688,8 +688,8 @@ Terima kasih telah mempercayakan sewa di HERAZEALIKHA!`;
                   <label className="block text-xs font-bold text-slate-500 uppercase mb-2 flex items-center gap-1">
                     <Upload size={14} className="text-green-600" /> Upload Bukti Pelunasan <span className="text-green-600 normal-case">(Wajib)</span>
                   </label>
-                  <input 
-                    type="file" 
+                  <input
+                    type="file"
                     accept="image/*"
                     onChange={handleFileChangePelunasan}
                     className="w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-green-50 file:text-green-700 hover:file:bg-green-100 cursor-pointer border border-slate-200 rounded-xl p-1 bg-slate-50"
@@ -697,7 +697,7 @@ Terima kasih telah mempercayakan sewa di HERAZEALIKHA!`;
                   {pelunasanPreview && (
                     <div className="mt-3 p-2 border border-slate-200 rounded-xl bg-slate-50 flex justify-center h-32 relative">
                       <img src={pelunasanPreview} alt="Preview Bukti" className="h-full object-contain rounded-lg" />
-                      <button onClick={() => { setPelunasanFile(null); setPelunasanPreview(''); }} className="absolute top-1 right-1 bg-white/80 p-1 rounded-md text-red-500 hover:text-red-700 shadow-sm"><X size={14}/></button>
+                      <button onClick={() => { setPelunasanFile(null); setPelunasanPreview(''); }} className="absolute top-1 right-1 bg-white/80 p-1 rounded-md text-red-500 hover:text-red-700 shadow-sm"><X size={14} /></button>
                     </div>
                   )}
                 </div>
@@ -706,8 +706,8 @@ Terima kasih telah mempercayakan sewa di HERAZEALIKHA!`;
 
             <div className="p-4 border-t border-slate-100 bg-slate-50 flex gap-3">
               <button onClick={() => setShowPelunasanModal(false)} className="flex-1 py-3 rounded-xl font-bold text-slate-600 bg-white border border-slate-200 hover:bg-slate-100 transition-colors">Batal</button>
-              <button 
-                onClick={submitPelunasan} 
+              <button
+                onClick={submitPelunasan}
                 disabled={isProcessingPelunasan || (pelunasanMetode !== 'Tunai' && !pelunasanFile)}
                 className="flex-1 py-3 rounded-xl font-bold text-white bg-green-600 hover:bg-green-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm"
               >
@@ -723,21 +723,21 @@ Terima kasih telah mempercayakan sewa di HERAZEALIKHA!`;
       {showReturnModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 print:hidden">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
-            
+
             <div className="p-6 border-b border-purple-100 bg-purple-50/50">
               <h3 className="text-xl font-bold text-slate-800">Cek Kondisi Barang Kembali</h3>
               <p className="text-sm text-slate-500 mt-1">Pastikan barang dan aksesoris kembali utuh. Pilih status untuk setiap barang.</p>
             </div>
-            
+
             <div className="p-6 overflow-y-auto flex-1 space-y-4">
               <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl mb-2">
                 <p className="text-sm font-bold text-amber-800 mb-1">Pengecekan Kelengkapan</p>
                 <p className="text-xs text-amber-700 mb-4">Catatan Kelengkapan: <b>{sewa.kelengkapan || 'Tidak ada catatan kelengkapan (Aman)'}</b></p>
                 <label className="flex items-start gap-3 cursor-pointer group">
                   <div className="pt-0.5">
-                    <input 
-                      type="checkbox" 
-                      checked={isKelengkapanSesuai} 
+                    <input
+                      type="checkbox"
+                      checked={isKelengkapanSesuai}
                       onChange={(e) => setIsKelengkapanSesuai(e.target.checked)}
                       className="w-5 h-5 text-purple-600 rounded border-gray-300 focus:ring-purple-500 cursor-pointer"
                     />
@@ -754,8 +754,8 @@ Terima kasih telah mempercayakan sewa di HERAZEALIKHA!`;
                     <p className="font-bold text-slate-800">{item.katalog_barang?.nama_barang}</p>
                     <p className="text-xs text-slate-500 font-semibold mt-0.5">Disewa sebanyak: {item.qty} pcs</p>
                   </div>
-                  
-                  <select 
+
+                  <select
                     value={item.kondisi}
                     onChange={(e) => handleKondisiChange(index, e.target.value)}
                     className="w-full sm:w-48 px-3 py-2.5 rounded-lg border border-slate-300 text-sm font-semibold text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-purple-500"
@@ -770,23 +770,23 @@ Terima kasih telah mempercayakan sewa di HERAZEALIKHA!`;
             </div>
 
             <div className="p-6 border-t border-slate-100 bg-white flex justify-end gap-3 shrink-0">
-              <button 
+              <button
                 disabled={isReturning}
                 onClick={() => setShowReturnModal(false)}
                 className="px-6 py-2.5 rounded-xl font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
               >
                 Batal
               </button>
-              <button 
+              <button
                 disabled={isReturning || !isKelengkapanSesuai}
                 onClick={submitPengembalian}
                 className="px-6 py-2.5 rounded-xl font-bold text-white bg-pink-600 hover:bg-pink-700 disabled:opacity-50 disabled:hover:bg-pink-600 transition-colors flex items-center gap-2"
               >
-                {isReturning ? <Loader2 size={18} className="animate-spin"/> : <CheckCircle size={18} />}
+                {isReturning ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle size={18} />}
                 Simpan & Selesaikan Transaksi
               </button>
             </div>
-            
+
           </div>
         </div>
       )}

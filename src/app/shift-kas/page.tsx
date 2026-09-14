@@ -3,43 +3,42 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import toast from 'react-hot-toast';
-import { 
-  ArrowRightLeft, FileText, Power, Wallet, Banknote, 
+import {
+  ArrowRightLeft, FileText, Power, Wallet, Banknote,
   CreditCard, CheckCircle, Clock, QrCode, Loader2, X,
   Settings, Plus, Trash2, CalendarDays, LockOpen, Lock, Calendar, History,
   ArrowDownToLine, ArrowUpFromLine, ShieldCheck, Upload, Image as ImageIcon
 } from 'lucide-react';
 
+// DIUBAH: Default sekarang hanya "Satu Harian Penuh"
 const DEFAULT_SHIFTS = [
-  { id: '1', nama: 'Shift Pagi', start: '07:00', end: '15:00' },
-  { id: '2', nama: 'Shift Sore', start: '15:00', end: '23:00' },
-  { id: '3', nama: 'Satu Harian Penuh', start: '00:00', end: '23:59' }
+  { id: '1', nama: 'Satu Harian Penuh', start: '00:00', end: '23:59' }
 ];
 
 export default function ShiftKasPage() {
   const [isMounted, setIsMounted] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
-  
+
   const getTodayDateString = () => {
-    const tzOffset = (new Date()).getTimezoneOffset() * 60000; 
+    const tzOffset = (new Date()).getTimezoneOffset() * 60000;
     return (new Date(Date.now() - tzOffset)).toISOString().split('T')[0];
   };
-  
+
   const [selectedDate, setSelectedDate] = useState('');
   const [transaksiList, setTransaksiList] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  
+
   const [isShiftOpen, setIsShiftOpen] = useState(false);
-  const [saldoAwal, setSaldoAwal] = useState(500000); 
-  
+  const [saldoAwal, setSaldoAwal] = useState(500000);
+
   // State untuk Tutup Shift
-  const [uangFisikAktual, setUangFisikAktual] = useState(0); 
+  const [uangFisikAktual, setUangFisikAktual] = useState(0);
   const [uangSetoran, setUangSetoran] = useState(0);
   const [isClosingSubmitting, setIsClosingSubmitting] = useState(false);
-  
+
   const [schedules, setSchedules] = useState<any[]>(DEFAULT_SHIFTS);
   const [activeShiftId, setActiveShiftId] = useState<string>('1');
-  
+
   const [isModalBukaShiftOpen, setIsModalBukaShiftOpen] = useState(false);
   const [isModalTutupShiftOpen, setIsModalTutupShiftOpen] = useState(false);
   const [isModalJadwalOpen, setIsModalJadwalOpen] = useState(false);
@@ -58,11 +57,11 @@ export default function ShiftKasPage() {
     const savedShiftStatus = localStorage.getItem('herazealikha_shift_status');
     const savedActiveShift = localStorage.getItem('herazealikha_active_shift');
     const savedSaldoLaci = localStorage.getItem('herazealikha_saldo_laci');
-    
+
     if (savedSchedules) setSchedules(JSON.parse(savedSchedules));
     if (savedShiftStatus === 'open') setIsShiftOpen(true);
     if (savedActiveShift) setActiveShiftId(savedActiveShift);
-    
+
     if (savedSaldoLaci) {
       setSaldoAwal(Number(savedSaldoLaci));
     }
@@ -101,7 +100,7 @@ export default function ShiftKasPage() {
     if (!isShiftOpen) return "Kasir Tutup";
     const activeShift = schedules.find(s => s.id === activeShiftId) || schedules[0];
     const endTimeStr = activeShift.end;
-    
+
     const now = currentTime;
     const end = new Date(now);
     const [hours, minutes] = endTimeStr.split(':');
@@ -129,16 +128,15 @@ export default function ShiftKasPage() {
   const handleTutupShift = async () => {
     setIsClosingSubmitting(true);
     try {
-      // Modal shift depan adalah uang fisik aktual dikurangi uang yang disetorkan
       const modalShiftDepan = uangFisikAktual - uangSetoran;
-      
+
       setIsShiftOpen(false);
       localStorage.setItem('herazealikha_shift_status', 'closed');
       localStorage.setItem('herazealikha_saldo_laci', modalShiftDepan.toString());
-      
+
       toast.success('Sesi Kasir berhasil ditutup! Saldo laci diteruskan ke shift selanjutnya.');
       setIsModalTutupShiftOpen(false);
-      
+
       setUangFisikAktual(0);
       setUangSetoran(0);
     } catch (error: any) {
@@ -194,7 +192,7 @@ export default function ShiftKasPage() {
 
     setIsSubmitting(true);
     try {
-      let publicUrl = selectedTransaksi.bukti_pembayaran; 
+      let publicUrl = selectedTransaksi.bukti_pembayaran;
 
       if (compressedFile) {
         const fileName = `bukti_${selectedTransaksi.invoice}_${Date.now()}.jpg`;
@@ -213,14 +211,14 @@ export default function ShiftKasPage() {
 
       const { error: updateError } = await supabase
         .from('sewa')
-        .update({ 
+        .update({
           status_pembayaran: 'diterima',
           bukti_pembayaran: publicUrl
         })
         .eq('id', selectedTransaksi.id);
 
       if (updateError) throw updateError;
-      
+
       toast.success('Bukti pembayaran diunggah & diverifikasi!');
       setSelectedTransaksi(null);
       setPreviewImage('');
@@ -243,7 +241,6 @@ export default function ShiftKasPage() {
     return itemTime >= activeShift.start && itemTime <= activeShift.end;
   });
 
-  // LOGIKA PENGHITUNGAN MIX PAYMENT (SPLIT METHOD)
   let uangKasMasuk = 0;
   let uangNonTunai = 0;
   const rincianMetode: Record<string, number> = {};
@@ -276,9 +273,9 @@ export default function ShiftKasPage() {
         });
       }
     } else {
-      const nominal = item.dp || 0; 
+      const nominal = item.dp || 0;
       if (metode.toLowerCase().includes('transfer')) metode = 'Transfer';
-      
+
       const isNonTunai = metode.toLowerCase() !== 'tunai' && metode.toLowerCase() !== 'cash';
 
       if (!rincianMetode[metode]) rincianMetode[metode] = 0;
@@ -286,9 +283,9 @@ export default function ShiftKasPage() {
 
       if (!isNonTunai) {
         uangKasMasuk += nominal;
-      } else { 
-        uangNonTunai += nominal; 
-        listNonTunai.push(item); 
+      } else {
+        uangNonTunai += nominal;
+        listNonTunai.push(item);
       }
     }
   });
@@ -306,7 +303,7 @@ export default function ShiftKasPage() {
 
   return (
     <div className="flex flex-col gap-6 h-full pb-8 pt-2 w-full max-w-full overflow-x-hidden relative bg-white">
-      
+
       {/* HEADER UTAMA */}
       <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 w-full bg-white p-4 sm:p-5 rounded-2xl shadow-sm border border-purple-200">
         <div className="flex-1 min-w-0 flex items-center gap-4">
@@ -321,18 +318,18 @@ export default function ShiftKasPage() {
               </p>
               {isShiftOpen && isHariIni && (
                 <p className="text-xs font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded-md flex items-center gap-1 animate-pulse">
-                  <Clock size={12}/> Sisa: {getSisaWaktu()}
+                  <Clock size={12} /> Sisa: {getSisaWaktu()}
                 </p>
               )}
             </div>
           </div>
         </div>
-        
+
         <div className="flex flex-col sm:flex-row items-center gap-3 w-full xl:w-auto">
           <div className="relative flex items-center bg-purple-50 rounded-xl border border-purple-200">
             <Calendar className="absolute left-3 text-purple-600" size={16} />
-            <input 
-              type="date" 
+            <input
+              type="date"
               value={selectedDate}
               onChange={(e) => setSelectedDate(e.target.value)}
               className="bg-transparent text-sm font-bold text-slate-700 outline-none pl-9 pr-3 py-2 cursor-pointer w-full"
@@ -341,7 +338,7 @@ export default function ShiftKasPage() {
 
           <div className="flex items-center gap-2 w-full sm:w-auto bg-purple-50 p-1.5 rounded-xl border border-purple-200">
             <span className="text-xs font-semibold text-slate-500 pl-2 shrink-0">Shift:</span>
-            <select 
+            <select
               value={activeShiftId}
               onChange={(e) => setActiveShiftId(e.target.value)}
               disabled={isShiftOpen && isHariIni}
@@ -352,8 +349,8 @@ export default function ShiftKasPage() {
               ))}
             </select>
           </div>
-          
-          <button 
+
+          <button
             onClick={() => setIsModalJadwalOpen(true)}
             disabled={isShiftOpen && isHariIni}
             className="flex items-center justify-center p-2 bg-white border border-purple-200 hover:bg-purple-50 text-slate-600 rounded-xl transition-colors shrink-0 shadow-sm disabled:opacity-50"
@@ -363,9 +360,9 @@ export default function ShiftKasPage() {
           </button>
 
           {!isHariIni ? (
-             <div className="w-full sm:w-auto flex items-center justify-center gap-2 bg-slate-100 border border-slate-200 text-slate-500 font-bold py-2 px-6 rounded-xl text-sm shrink-0 cursor-not-allowed" title="Anda sedang melihat data masa lalu">
-               <History size={16} /> Mode Riwayat
-             </div>
+            <div className="w-full sm:w-auto flex items-center justify-center gap-2 bg-slate-100 border border-slate-200 text-slate-500 font-bold py-2 px-6 rounded-xl text-sm shrink-0 cursor-not-allowed" title="Anda sedang melihat data masa lalu">
+              <History size={16} /> Mode Riwayat
+            </div>
           ) : (
             isShiftOpen ? (
               <button onClick={siapkanTutupShift} className="w-full sm:w-auto flex items-center justify-center gap-2 bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-6 rounded-xl text-sm transition-transform shadow-sm shrink-0">
@@ -396,7 +393,7 @@ export default function ShiftKasPage() {
         </div>
       ) : (
         <div className="space-y-6">
-          
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full">
             <div className="bg-white p-5 rounded-2xl shadow-sm border border-purple-200 flex flex-col justify-center">
               <div className="flex items-center gap-3 mb-3">
@@ -417,7 +414,7 @@ export default function ShiftKasPage() {
             </div>
 
             <div className="bg-white p-5 rounded-2xl shadow-sm border border-purple-200 flex flex-col justify-center relative overflow-hidden">
-               <div className="absolute right-4 -bottom-4 opacity-5 pointer-events-none text-purple-600"><CreditCard size={100} /></div>
+              <div className="absolute right-4 -bottom-4 opacity-5 pointer-events-none text-purple-600"><CreditCard size={100} /></div>
               <div className="flex items-center gap-3 mb-3 relative z-10">
                 <div className="p-2.5 bg-purple-100 rounded-xl text-purple-700 shrink-0"><CreditCard size={22} /></div>
                 <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Non Tunai (Transfer/QR)</p>
@@ -439,9 +436,9 @@ export default function ShiftKasPage() {
                   Object.entries(rincianMetode).map(([metode, total]) => (
                     <div key={metode} className="flex items-center justify-between p-3 rounded-xl bg-purple-50/40 border border-purple-100">
                       <div className="flex items-center gap-3">
-                        {metode.toLowerCase() === 'tunai' ? <Banknote size={20} className="text-green-600" /> : 
-                         metode.toLowerCase().includes('qris') ? <QrCode size={20} className="text-purple-700" /> : 
-                         <CreditCard size={20} className="text-blue-600" />}
+                        {metode.toLowerCase() === 'tunai' ? <Banknote size={20} className="text-green-600" /> :
+                          metode.toLowerCase().includes('qris') ? <QrCode size={20} className="text-purple-700" /> :
+                            <CreditCard size={20} className="text-blue-600" />}
                         <span className="font-semibold text-sm text-slate-700">{metode}</span>
                       </div>
                       <span className="font-bold text-slate-800">Rp {total.toLocaleString('id-ID')}</span>
@@ -460,7 +457,7 @@ export default function ShiftKasPage() {
                   </span>
                 )}
               </div>
-              
+
               <div className="overflow-x-auto w-full flex-1 min-h-[300px]">
                 <table className="w-full min-w-[600px] text-left text-sm text-slate-600">
                   <thead className="bg-purple-50/50 text-slate-700 font-semibold border-b border-purple-100">
@@ -493,17 +490,16 @@ export default function ShiftKasPage() {
                               <div className="text-xs text-purple-700 font-medium">{item.metode_pembayaran || 'Transfer'}</div>
                             </td>
                             <td className="px-5 py-4 text-center whitespace-nowrap">
-                              <button 
+                              <button
                                 onClick={() => {
                                   setSelectedTransaksi(item);
                                   setPreviewImage(item.bukti_pembayaran || ''); // Menggunakan bukti_pembayaran
                                   setCompressedFile(null);
                                 }}
-                                className={`font-semibold py-1.5 px-4 rounded-xl text-xs transition-colors shadow-sm inline-flex items-center gap-1.5 ${
-                                  isMenunggu 
-                                    ? 'bg-purple-700 hover:bg-purple-800 text-white' 
+                                className={`font-semibold py-1.5 px-4 rounded-xl text-xs transition-colors shadow-sm inline-flex items-center gap-1.5 ${isMenunggu
+                                    ? 'bg-purple-700 hover:bg-purple-800 text-white'
                                     : 'bg-green-50 text-green-700 border border-green-200 hover:bg-green-100'
-                                }`}
+                                  }`}
                               >
                                 <ShieldCheck size={14} /> {isMenunggu ? 'Verifikasi / Upload Bukti' : 'Ubah / Lihat Bukti'}
                               </button>
@@ -524,7 +520,7 @@ export default function ShiftKasPage() {
       {selectedTransaksi && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
           <div className="bg-white w-full max-w-md rounded-2xl shadow-xl overflow-hidden flex flex-col">
-            
+
             <div className="p-5 border-b border-purple-100 bg-purple-50 flex justify-between items-center">
               <h3 className="font-bold text-slate-800 text-base flex items-center gap-2">
                 <ShieldCheck size={18} className="text-purple-700" /> Upload Bukti Pembayaran
@@ -544,8 +540,8 @@ export default function ShiftKasPage() {
                 <label className="block text-xs font-bold text-slate-600 uppercase mb-1.5 flex items-center gap-1">
                   <Upload size={14} className="text-purple-700" /> Pilih File Gambar Bukti TF / QRIS
                 </label>
-                <input 
-                  type="file" 
+                <input
+                  type="file"
                   accept="image/*"
                   onChange={handleFileChange}
                   className="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100 cursor-pointer border border-purple-200 rounded-xl p-1 bg-slate-50"
@@ -561,13 +557,13 @@ export default function ShiftKasPage() {
             </div>
 
             <div className="p-4 border-t border-purple-100 bg-slate-50 flex gap-2">
-              <button 
+              <button
                 onClick={() => setSelectedTransaksi(null)}
                 className="flex-1 bg-white border border-purple-200 text-slate-600 hover:bg-purple-50 font-bold py-2.5 rounded-xl text-xs transition-colors"
               >
                 Batal
               </button>
-              <button 
+              <button
                 onClick={handleVerifikasiBuktiTf}
                 disabled={isSubmitting}
                 className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 rounded-xl text-xs transition-colors shadow-sm disabled:opacity-50 flex items-center justify-center gap-1.5"
@@ -593,14 +589,14 @@ export default function ShiftKasPage() {
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Uang Modal Awal Laci (Rp)</label>
               <div className="relative">
                 <Wallet className="absolute left-3 top-3 text-purple-700" size={20} />
-                <input 
-                  type="text" 
-                  value={saldoAwal ? saldoAwal.toLocaleString('id-ID') : ''} 
+                <input
+                  type="text"
+                  value={saldoAwal ? saldoAwal.toLocaleString('id-ID') : ''}
                   onChange={(e) => {
                     const val = e.target.value.replace(/\D/g, '');
                     setSaldoAwal(Number(val));
-                  }} 
-                  className="w-full bg-slate-50 border border-purple-200 text-slate-800 font-bold text-lg rounded-xl pl-10 pr-4 py-3 outline-none focus:border-purple-600 focus:ring-1 focus:ring-purple-600 transition-all" 
+                  }}
+                  className="w-full bg-slate-50 border border-purple-200 text-slate-800 font-bold text-lg rounded-xl pl-10 pr-4 py-3 outline-none focus:border-purple-600 focus:ring-1 focus:ring-purple-600 transition-all"
                 />
               </div>
             </div>
@@ -611,7 +607,7 @@ export default function ShiftKasPage() {
         </div>
       )}
 
-      {/* MODAL TUTUP SHIFT (Tanpa Upload & Nominal Kas Dikunci) */}
+      {/* MODAL TUTUP SHIFT */}
       {isModalTutupShiftOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
           <div className="bg-white w-full max-w-md rounded-2xl shadow-xl overflow-hidden flex flex-col max-h-[95vh]">
@@ -640,8 +636,7 @@ export default function ShiftKasPage() {
                   <label className="block text-xs font-bold text-slate-600 uppercase mb-1.5 flex items-center gap-1.5">
                     <Wallet size={14} className="text-purple-700" /> 1. Uang Aktual Laci (Otomatis Sistem)
                   </label>
-                  {/* DIUBAH MENJADI TEXT BOX DISABLED/NON-EDITABLE */}
-                  <div className="w-full bg-slate-200/60 border border-slate-300 text-slate-600 font-bold text-lg rounded-lg px-3 py-2 cursor-not-allowed"> 
+                  <div className="w-full bg-slate-200/60 border border-slate-300 text-slate-600 font-bold text-lg rounded-lg px-3 py-2 cursor-not-allowed">
                     Rp {uangFisikAktual ? uangFisikAktual.toLocaleString('id-ID') : '0'}
                   </div>
                   <p className="text-[10px] text-slate-400 mt-1 italic">*Nilai ini dikunci dan disesuaikan otomatis oleh sistem berdasarkan total uang fisik yang masuk.</p>
@@ -650,19 +645,18 @@ export default function ShiftKasPage() {
                   <label className="block text-xs font-bold text-slate-600 uppercase mb-1.5 flex items-center gap-1.5">
                     <ArrowUpFromLine size={14} className="text-purple-700" /> 2. Uang Disetorkan (Diambil dari Laci)
                   </label>
-                  <input 
-                    type="text" 
-                    value={uangSetoran ? uangSetoran.toLocaleString('id-ID') : ''} 
+                  <input
+                    type="text"
+                    value={uangSetoran ? uangSetoran.toLocaleString('id-ID') : ''}
                     onChange={(e) => {
                       const val = e.target.value.replace(/\D/g, '');
-                      // Batasi agar tidak bisa setor melebihi uang fisik aktual
                       if (Number(val) > uangFisikAktual) {
                         setUangSetoran(uangFisikAktual);
                       } else {
                         setUangSetoran(Number(val));
                       }
-                    }} 
-                    className="w-full bg-white border border-purple-200 text-slate-800 font-bold text-lg rounded-lg px-3 py-2 outline-none focus:border-purple-600 focus:ring-2 focus:ring-purple-200 transition-all" 
+                    }}
+                    className="w-full bg-white border border-purple-200 text-slate-800 font-bold text-lg rounded-lg px-3 py-2 outline-none focus:border-purple-600 focus:ring-2 focus:ring-purple-200 transition-all"
                     placeholder="0"
                   />
                 </div>
@@ -677,8 +671,8 @@ export default function ShiftKasPage() {
               </div>
             </div>
             <div className="p-4 border-t border-purple-100 bg-slate-50 flex gap-3 shrink-0">
-              <button 
-                onClick={handleTutupShift} 
+              <button
+                onClick={handleTutupShift}
                 disabled={isClosingSubmitting}
                 className="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-3 rounded-xl text-sm transition-colors disabled:opacity-50 flex items-center justify-center gap-2 shadow-sm"
               >
@@ -714,10 +708,10 @@ export default function ShiftKasPage() {
                     <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Selesai</label>
                     <input type="time" value={shift.end} onChange={(e) => { const n = [...schedules]; n[index].end = e.target.value; setSchedules(n); }} className="w-full bg-white border rounded-lg px-3 py-2 text-sm outline-none focus:border-purple-600 font-mono" />
                   </div>
-                  <button onClick={() => { if(schedules.length===1) return; setSchedules(schedules.filter(s => s.id !== shift.id)); }} className="p-2 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 size={18}/></button>
+                  <button onClick={() => { if (schedules.length === 1) return; setSchedules(schedules.filter(s => s.id !== shift.id)); }} className="p-2 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 size={18} /></button>
                 </div>
               ))}
-              <button onClick={() => setSchedules([...schedules, { id: Date.now().toString(), nama: 'Shift Baru', start: '00:00', end: '00:00' }])} className="w-full py-3 border-2 border-dashed border-purple-200 text-purple-700 font-semibold rounded-xl text-sm flex items-center justify-center gap-2 hover:bg-purple-50"><Plus size={16}/> Tambah Jadwal Baru</button>
+              <button onClick={() => setSchedules([...schedules, { id: Date.now().toString(), nama: 'Shift Baru', start: '00:00', end: '00:00' }])} className="w-full py-3 border-2 border-dashed border-purple-200 text-purple-700 font-semibold rounded-xl text-sm flex items-center justify-center gap-2 hover:bg-purple-50"><Plus size={16} /> Tambah Jadwal Baru</button>
             </div>
             <div className="p-5 border-t border-purple-100 bg-slate-50">
               <button onClick={simpanJadwal} className="w-full bg-purple-700 hover:bg-purple-800 text-white font-bold py-2.5 rounded-xl text-sm shadow-sm">Simpan Jadwal</button>
