@@ -789,106 +789,112 @@ export default function KasirPage() {
             #thermal-receipt { 
               display: block !important; 
               width: 100%; 
-              max-width: 74mm; /* Memberikan jeda aman di sebelah kanan */
+              max-width: 74mm; 
               margin: 0; 
               padding: 4mm 4mm 2mm 2mm; 
               box-sizing: border-box;
               font-family: 'Courier New', Courier, monospace; 
-              color: black;
+              color: #000 !important; /* Memaksa warna hitam murni */
+              font-weight: bold !important; /* Memaksa tulisan tebal */
+            }
+            #thermal-receipt * {
+               color: #000 !important;
+               /* Trik untuk thermal printer agar teks lebih tebal dan tidak blur */
+               -webkit-text-stroke: 0.3px black; 
             }
             table { width: 100%; table-layout: fixed; }
             td, th { word-wrap: break-word; overflow-wrap: break-word; }
+            .border-dashed { border-style: dashed !important; border-color: #000 !important; border-width: 1.5px !important;}
+            .border-dotted { border-style: dotted !important; border-color: #000 !important; border-width: 1.5px !important;}
           }
         `}} />
       )}
 
       {successData && (
-        <div id="thermal-receipt" className="hidden print:block text-black bg-white">
+        <div id="thermal-receipt" className="hidden print:block text-black bg-white font-bold">
           <div className="text-center mb-4">
             <img src="/gambar.jpeg" alt="Logo" className="w-16 mx-auto mb-1 grayscale" style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as React.CSSProperties} />
             <h1 className="text-lg font-black tracking-widest">HERAZEALIKHA</h1>
-            <p className="text-[10px]">Jl. Purwo Km.11 GG.Koramil, Delitua<br />Medan</p>
-            <p className="text-[10px] mt-1">Invoice: {successData.invoice}</p>
+            <p className="text-[10px] font-bold">Jl. Purwo Km.11 GG.Koramil, Delitua<br />Medan</p>
+            <p className="text-[10px] mt-1 font-bold">Invoice: {successData.invoice}</p>
           </div>
 
-          <div className="border-b border-dashed border-black mb-3"></div>
+          <div className="border-b-2 border-dashed border-black mb-3"></div>
 
           <div className="grid grid-cols-2 gap-2 text-[10px] mb-3">
             <div>
-              <p className="font-bold uppercase underline">Informasi Pelanggan</p>
-              <p className="mt-1 font-bold text-[9px] uppercase">NAMA PENYEWA</p>
-              <p className="leading-tight pr-1">{successData.nama_penyewa}</p>
-              <p className="mt-1 font-bold text-[9px] uppercase">NO. WHATSAPP</p>
-              <p className="leading-tight">{successData.no_wa || '-'}</p>
-              <p className="mt-1 font-bold text-[9px] uppercase">JAMINAN IDENTITAS</p>
-              <p className="leading-tight">{successData.jenis_jaminan || '-'} ({successData.nomor_jaminan || '-'})</p>
+              <p className="font-black uppercase underline">Informasi Pelanggan</p>
+              <p className="mt-1 font-black text-[9px] uppercase">NAMA PENYEWA</p>
+              <p className="leading-tight pr-1 font-bold">{successData.nama_penyewa}</p>
+              <p className="mt-1 font-black text-[9px] uppercase">NO. WHATSAPP</p>
+              <p className="leading-tight font-bold">{successData.no_wa || '-'}</p>
+              <p className="mt-1 font-black text-[9px] uppercase">JAMINAN IDENTITAS</p>
+              <p className="leading-tight font-bold">{successData.jenis_jaminan || '-'} ({successData.nomor_jaminan || '-'})</p>
             </div>
             <div>
-              <p className="font-bold uppercase underline">Jadwal & Status</p>
-              {/* Diubah menjadi flex-col agar tanggal tidak melebar memotong ke kanan */}
+              <p className="font-black uppercase underline">Jadwal & Status</p>
               <div className="flex flex-col gap-1 mt-1">
                 <div>
-                  <p className="font-bold text-[9px] uppercase">WAKTU AMBIL</p>
-                  <p className="leading-tight">{successData.tanggal_bawa}</p>
+                  <p className="font-black text-[9px] uppercase">WAKTU AMBIL</p>
+                  <p className="leading-tight font-bold">{successData.tanggal_bawa}</p>
                 </div>
                 <div>
-                  <p className="font-bold text-[9px] uppercase">BATAS KEMBALI</p>
-                  <p className="leading-tight">{successData.tanggal_kembali}</p>
+                  <p className="font-black text-[9px] uppercase">BATAS KEMBALI</p>
+                  <p className="leading-tight font-bold">{successData.tanggal_kembali}</p>
                 </div>
               </div>
-              <p className="mt-2 font-bold text-[9px] uppercase">STATUS PENYEWAAN</p>
-              <p className="leading-tight font-bold border border-black inline-block px-1 mt-0.5">{successData.status.toUpperCase()}</p>
+              <p className="mt-2 font-black text-[9px] uppercase">STATUS PENYEWAAN</p>
+              <p className="leading-tight font-black border border-black inline-block px-1 mt-0.5">{successData.status.toUpperCase()}</p>
             </div>
           </div>
 
-          <div className="border-b border-dashed border-black mb-3"></div>
+          <div className="border-b-2 border-dashed border-black mb-3"></div>
 
           <div className="text-[11px] mb-3">
-            <p className="font-bold mb-2 flex items-center gap-1">Rincian Barang</p>
+            <p className="font-black mb-2 flex items-center gap-1">Rincian Barang</p>
             <table className="w-full text-left">
               <thead>
-                <tr className="border-b border-black">
-                  <th className="font-normal pb-1 w-[50%]">Nama Barang</th>
-                  <th className="font-normal pb-1 text-right w-[30%]">Harga</th>
-                  <th className="font-normal pb-1 text-right w-[20%]">Qty</th>
+                <tr className="border-b-2 border-black">
+                  <th className="font-bold pb-1 w-[50%]">Nama Barang</th>
+                  <th className="font-bold pb-1 text-right w-[30%]">Harga</th>
+                  <th className="font-bold pb-1 text-right w-[20%]">Qty</th>
                 </tr>
               </thead>
               <tbody>
                 {successData.cartItems.map((item: any, idx: number) => (
                   <tr key={idx}>
-                    <td className="py-1 pr-1 align-top leading-tight">{item.nama_barang}</td>
-                    <td className="py-1 px-1 text-right align-top leading-tight">Rp {item.harga.toLocaleString('id-ID')}</td>
-                    <td className="py-1 pl-1 text-right font-bold align-top leading-tight">{item.qty}x</td>
+                    <td className="py-1 pr-1 align-top leading-tight font-bold">{item.nama_barang}</td>
+                    <td className="py-1 px-1 text-right align-top leading-tight font-bold">Rp {item.harga.toLocaleString('id-ID')}</td>
+                    <td className="py-1 pl-1 text-right align-top leading-tight font-black">{item.qty}x</td>
                   </tr>
                 ))}
               </tbody>
             </table>
 
-            {/* Support format baris vertikal saat di-print thermal */}
             {successData.kelengkapan && (
-              <div className="mt-2 pt-2 border-t border-dotted border-black text-[10px] whitespace-pre-line">
-                <span className="font-bold">Kelengkapan Manual:</span><br />
+              <div className="mt-2 pt-2 border-t-2 border-dotted border-black text-[10px] whitespace-pre-line font-bold">
+                <span className="font-black">Kelengkapan Manual:</span><br />
                 {successData.kelengkapan}
               </div>
             )}
           </div>
 
-          <div className="border-b border-dashed border-black mb-3"></div>
+          <div className="border-b-2 border-dashed border-black mb-3"></div>
 
-          <div className="text-[11px] mb-4 space-y-1">
-            <p className="font-bold mb-2">Ringkasan Pembayaran</p>
+          <div className="text-[11px] mb-4 space-y-1 font-bold">
+            <p className="font-black mb-2">Ringkasan Pembayaran</p>
             <div className="flex justify-between"><span>Metode Bayar</span><span>{successData.metode_pembayaran}</span></div>
             <div className="flex justify-between"><span>Total Tagihan</span><span>Rp {successData.total_harga.toLocaleString('id-ID')}</span></div>
             <div className="flex justify-between"><span>Sudah Dibayar (DP)</span><span>Rp {successData.dp.toLocaleString('id-ID')}</span></div>
-            <div className="flex justify-between font-bold text-[12px] pt-1 mt-1 border-t border-black">
+            <div className="flex justify-between font-black text-[12px] pt-1 mt-1 border-t-2 border-black">
               <span>Sisa Tagihan</span><span>{successData.sisaBayar > 0 ? `Rp ${successData.sisaBayar.toLocaleString('id-ID')}` : 'LUNAS'}</span>
             </div>
           </div>
 
-          <div className="border-b border-dashed border-black mb-3"></div>
+          <div className="border-b-2 border-dashed border-black mb-3"></div>
 
-          <div className="text-[9px] leading-tight">
-            <p className="font-bold mb-1">Syarat & Ketentuan Penyewaan:</p>
+          <div className="text-[9px] leading-tight font-bold">
+            <p className="font-black mb-1">Syarat & Ketentuan Penyewaan:</p>
             <ol className="list-decimal pl-3 pr-1 space-y-1">
               <li>Wajib membawa identitas (KTP/dll) & melunasi pembayaran saat pengambilan barang.</li>
               <li>Uang muka (DP) atau sewa yang sudah dibayarkan tidak dapat dikembalikan / dibatalkan.</li>
@@ -897,7 +903,7 @@ export default function KasirPage() {
               <li>Barang dikembalikan dalam keadaan apa adanya (Penyewa tidak perlu mencuci barang).</li>
               <li>Dengan menyewa, penyewa dianggap telah menyetujui seluruh ketentuan ini.</li>
             </ol>
-            <p className="text-center font-bold mt-4 mb-8">
+            <p className="text-center font-black mt-4 mb-8">
               TERIMA KASIH sudah menyewa, menjaga, dan merawat barang kami
             </p>
           </div>
