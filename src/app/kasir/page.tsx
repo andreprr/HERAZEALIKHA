@@ -159,7 +159,7 @@ export default function KasirPage() {
       if (kat) setKategoriList([{ nama: 'Semua' }, ...kat]);
     } catch (error) {
       toast.error('Gagal memuat data katalog');
-    } finally { // <--- TYPO DIPERBAIKI DI SINI (sebelumnya fontally)
+    } finally {
       setIsLoading(false);
     }
   };
@@ -778,22 +778,32 @@ export default function KasirPage() {
         <style dangerouslySetInnerHTML={{
           __html: `
           @media print {
-            @page { margin: 0; size: 80mm auto; } 
-            body { margin: 0; padding: 0; background: white; }
+            @page { margin: 0; } 
+            html, body { 
+              margin: 0; 
+              padding: 0; 
+              background: white; 
+              width: 80mm;
+            }
             .print\\:hidden { display: none !important; }
             #thermal-receipt { 
               display: block !important; 
-              width: 76mm; 
-              margin: 0 auto;
+              width: 100%; 
+              max-width: 74mm; /* Memberikan jeda aman di sebelah kanan */
+              margin: 0; 
+              padding: 4mm 4mm 2mm 2mm; 
+              box-sizing: border-box;
               font-family: 'Courier New', Courier, monospace; 
               color: black;
             }
+            table { width: 100%; table-layout: fixed; }
+            td, th { word-wrap: break-word; overflow-wrap: break-word; }
           }
         `}} />
       )}
 
       {successData && (
-        <div id="thermal-receipt" className="hidden print:block text-black p-2 bg-white">
+        <div id="thermal-receipt" className="hidden print:block text-black bg-white">
           <div className="text-center mb-4">
             <img src="/gambar.jpeg" alt="Logo" className="w-16 mx-auto mb-1 grayscale" style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as React.CSSProperties} />
             <h1 className="text-lg font-black tracking-widest">HERAZEALIKHA</h1>
@@ -807,7 +817,7 @@ export default function KasirPage() {
             <div>
               <p className="font-bold uppercase underline">Informasi Pelanggan</p>
               <p className="mt-1 font-bold text-[9px] uppercase">NAMA PENYEWA</p>
-              <p className="leading-tight">{successData.nama_penyewa}</p>
+              <p className="leading-tight pr-1">{successData.nama_penyewa}</p>
               <p className="mt-1 font-bold text-[9px] uppercase">NO. WHATSAPP</p>
               <p className="leading-tight">{successData.no_wa || '-'}</p>
               <p className="mt-1 font-bold text-[9px] uppercase">JAMINAN IDENTITAS</p>
@@ -815,7 +825,8 @@ export default function KasirPage() {
             </div>
             <div>
               <p className="font-bold uppercase underline">Jadwal & Status</p>
-              <div className="flex gap-2 mt-1">
+              {/* Diubah menjadi flex-col agar tanggal tidak melebar memotong ke kanan */}
+              <div className="flex flex-col gap-1 mt-1">
                 <div>
                   <p className="font-bold text-[9px] uppercase">WAKTU AMBIL</p>
                   <p className="leading-tight">{successData.tanggal_bawa}</p>
@@ -837,17 +848,17 @@ export default function KasirPage() {
             <table className="w-full text-left">
               <thead>
                 <tr className="border-b border-black">
-                  <th className="font-normal pb-1">Nama Barang</th>
-                  <th className="font-normal pb-1 text-right">Harga Satuan</th>
-                  <th className="font-normal pb-1 text-right">Qty</th>
+                  <th className="font-normal pb-1 w-[50%]">Nama Barang</th>
+                  <th className="font-normal pb-1 text-right w-[30%]">Harga</th>
+                  <th className="font-normal pb-1 text-right w-[20%]">Qty</th>
                 </tr>
               </thead>
               <tbody>
                 {successData.cartItems.map((item: any, idx: number) => (
                   <tr key={idx}>
-                    <td className="py-2 pr-1 align-top">{item.nama_barang}</td>
-                    <td className="py-2 px-1 text-right align-top">Rp {item.harga.toLocaleString('id-ID')}</td>
-                    <td className="py-2 pl-1 text-right font-bold align-top">{item.qty}x</td>
+                    <td className="py-1 pr-1 align-top leading-tight">{item.nama_barang}</td>
+                    <td className="py-1 px-1 text-right align-top leading-tight">Rp {item.harga.toLocaleString('id-ID')}</td>
+                    <td className="py-1 pl-1 text-right font-bold align-top leading-tight">{item.qty}x</td>
                   </tr>
                 ))}
               </tbody>
@@ -856,8 +867,8 @@ export default function KasirPage() {
             {/* Support format baris vertikal saat di-print thermal */}
             {successData.kelengkapan && (
               <div className="mt-2 pt-2 border-t border-dotted border-black text-[10px] whitespace-pre-line">
-                <span className="font-bold">Kelengkapan Manual:</span>
-                <p className="leading-tight">{successData.kelengkapan}</p>
+                <span className="font-bold">Kelengkapan Manual:</span><br />
+                {successData.kelengkapan}
               </div>
             )}
           </div>

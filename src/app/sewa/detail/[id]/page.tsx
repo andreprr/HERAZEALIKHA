@@ -546,7 +546,35 @@ Terima kasih telah mempercayakan sewa di HERAZEALIKHA!`;
       </div>
 
       {/* STRUK THERMAL */}
-      <div id="thermal-receipt" className="hidden print:block text-black p-2 bg-white">
+      {/* STRUK THERMAL */}
+      <style dangerouslySetInnerHTML={{
+        __html: `
+          @media print {
+            @page { margin: 0; } 
+            html, body { 
+              margin: 0; 
+              padding: 0; 
+              background: white; 
+              width: 80mm;
+            }
+            .print\\:hidden { display: none !important; }
+            #thermal-receipt { 
+              display: block !important; 
+              width: 100%; 
+              max-width: 74mm; /* Memberikan jeda aman agar tidak mentok kanan */
+              margin: 0; /* Hapus margin auto agar rata kiri */
+              padding: 4mm 4mm 2mm 2mm; 
+              box-sizing: border-box;
+              font-family: 'Courier New', Courier, monospace; 
+              color: black;
+            }
+            table { width: 100%; table-layout: fixed; }
+            td, th { word-wrap: break-word; overflow-wrap: break-word; }
+          }
+        `
+      }} />
+
+      <div id="thermal-receipt" className="hidden print:block text-black bg-white">
         <div className="text-center mb-4">
           <img src="/gambar.jpeg" alt="Logo" className="w-16 mx-auto mb-1 grayscale" style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as React.CSSProperties} />
           <h1 className="text-lg font-black tracking-widest">HERAZEALIKHA</h1>
@@ -560,7 +588,7 @@ Terima kasih telah mempercayakan sewa di HERAZEALIKHA!`;
           <div>
             <p className="font-bold uppercase underline">Informasi Pelanggan</p>
             <p className="mt-1 font-bold text-[9px] uppercase">NAMA PENYEWA</p>
-            <p className="leading-tight">{sewa.nama_penyewa}</p>
+            <p className="leading-tight pr-1">{sewa.nama_penyewa}</p>
             <p className="mt-1 font-bold text-[9px] uppercase">NO. WHATSAPP</p>
             <p className="leading-tight">{sewa.no_wa || '-'}</p>
             <p className="mt-1 font-bold text-[9px] uppercase">JAMINAN IDENTITAS</p>
@@ -568,14 +596,15 @@ Terima kasih telah mempercayakan sewa di HERAZEALIKHA!`;
           </div>
           <div>
             <p className="font-bold uppercase underline">Jadwal & Status</p>
-            <div className="flex gap-2 mt-1">
+            {/* Ubah menjadi vertikal (flex-col) agar tanggal tidak memotong ke kanan */}
+            <div className="flex flex-col gap-1 mt-1">
               <div>
                 <p className="font-bold text-[9px] uppercase">WAKTU AMBIL</p>
-                <p className="leading-tight">{formatDateTime(sewa.tanggal_bawa).replace(' ', '\n')}</p>
+                <p className="leading-tight">{formatDateTime(sewa.tanggal_bawa)}</p>
               </div>
               <div>
                 <p className="font-bold text-[9px] uppercase">BATAS KEMBALI</p>
-                <p className="leading-tight">{formatDateTime(sewa.tanggal_kembali).replace(' ', '\n')}</p>
+                <p className="leading-tight">{formatDateTime(sewa.tanggal_kembali)}</p>
               </div>
             </div>
             <p className="mt-2 font-bold text-[9px] uppercase">STATUS PENYEWAAN</p>
@@ -590,25 +619,26 @@ Terima kasih telah mempercayakan sewa di HERAZEALIKHA!`;
           <table className="w-full text-left">
             <thead>
               <tr className="border-b border-black">
-                <th className="font-normal pb-1">Nama Barang</th>
-                <th className="font-normal pb-1 text-right">Harga Satuan</th>
-                <th className="font-normal pb-1 text-right">Qty</th>
+                {/* Mengunci lebar kolom agar harga tidak terdorong */}
+                <th className="font-normal pb-1 w-[50%]">Nama Barang</th>
+                <th className="font-normal pb-1 text-right w-[30%]">Harga</th>
+                <th className="font-normal pb-1 text-right w-[20%]">Qty</th>
               </tr>
             </thead>
             <tbody>
               {items.map((item, idx) => (
                 <tr key={idx}>
-                  <td className="py-2 pr-1 align-top">{item.katalog_barang?.nama_barang}</td>
-                  <td className="py-2 px-1 text-right align-top">Rp {item.harga.toLocaleString('id-ID')}</td>
-                  <td className="py-2 pl-1 text-right font-bold align-top">{item.qty}x</td>
+                  <td className="py-1 pr-1 align-top leading-tight">{item.katalog_barang?.nama_barang}</td>
+                  <td className="py-1 px-1 text-right align-top leading-tight">Rp {item.harga.toLocaleString('id-ID')}</td>
+                  <td className="py-1 pl-1 text-right font-bold align-top leading-tight">{item.qty}x</td>
                 </tr>
               ))}
             </tbody>
           </table>
 
           {sewa.kelengkapan && (
-            <p className="mt-2 pt-2 border-t border-dotted border-black text-[10px]">
-              <span className="font-bold">Kelengkapan Manual:</span> {sewa.kelengkapan}
+            <p className="mt-2 pt-2 border-t border-dotted border-black text-[10px] whitespace-pre-line">
+              <span className="font-bold">Kelengkapan Manual:</span><br />{sewa.kelengkapan}
             </p>
           )}
         </div>
@@ -619,7 +649,7 @@ Terima kasih telah mempercayakan sewa di HERAZEALIKHA!`;
           <p className="font-bold mb-2">Ringkasan Pembayaran</p>
           <div className="flex justify-between"><span>Metode Bayar</span><span>{displayMetode}</span></div>
           <div className="flex justify-between"><span>Total Tagihan</span><span>Rp {total.toLocaleString('id-ID')}</span></div>
-          <div className="flex justify-between"><span>Sudah Dibayar (DP)</span><span>Rp {dp.toLocaleString('id-ID')}</span></div>
+          <div className="flex justify-between"><span>Sudah Dibayar</span><span>Rp {dp.toLocaleString('id-ID')}</span></div>
           <div className="flex justify-between font-bold text-[12px] pt-1 mt-1 border-t border-black">
             <span>Sisa Tagihan</span><span>{sisa > 0 ? `Rp ${sisa.toLocaleString('id-ID')}` : 'LUNAS'}</span>
           </div>
@@ -630,12 +660,12 @@ Terima kasih telah mempercayakan sewa di HERAZEALIKHA!`;
         <div className="text-[9px] leading-tight">
           <p className="font-bold mb-1">Syarat & Ketentuan Penyewaan:</p>
           <ol className="list-decimal pl-3 pr-1 space-y-1">
-            <li>Wajib membawa identitas (KTP/dll) & melunasi pembayaran saat pengambilan barang.</li>
-            <li>Uang muka (DP) atau sewa yang sudah dibayarkan tidak dapat dikembalikan / dibatalkan.</li>
-            <li>Pengembalian barang wajib sesuai jadwal. Keterlambatan dikenakan denda / charge tambahan.</li>
-            <li>Segala bentuk kerusakan atau kehilangan barang menjadi tanggung jawab penyewa sepenuhnya.</li>
-            <li>Barang dikembalikan dalam keadaan apa adanya (Penyewa tidak perlu mencuci barang).</li>
-            <li>Dengan menyewa, penyewa dianggap telah menyetujui seluruh ketentuan ini.</li>
+            <li>Wajib membawa identitas (KTP) & melunasi pembayaran saat pengambilan barang.</li>
+            <li>Uang muka (DP) atau sewa tidak dapat dikembalikan / dibatalkan.</li>
+            <li>Pengembalian wajib sesuai jadwal. Keterlambatan dikenakan denda tambahan.</li>
+            <li>Kerusakan atau kehilangan barang menjadi tanggung jawab penyewa sepenuhnya.</li>
+            <li>Barang dikembalikan dalam keadaan apa adanya (Tidak perlu dicuci).</li>
+            <li>Dengan menyewa, penyewa menyetujui seluruh ketentuan ini.</li>
           </ol>
           <p className="text-center font-bold mt-4 mb-8">
             TERIMA KASIH sudah menyewa, menjaga, dan merawat barang kami
